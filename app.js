@@ -1,11 +1,14 @@
 const { firebaseConfig, isFirebaseConfigured, appCheckSiteKey } = window.SEOHYEON_FIREBASE;
 
 const ADMIN_EMAIL = "hmpark014@gmail.com";
+const SCHOOL_EMAIL_PATTERN = /^25-\d{5}@seohyun\.hs\.kr$/i;
 const DEFAULT_LIMITS = { chars: 6000, images: 2, videos: 0 };
 const WIKI_CATEGORIES = ["학교", "학교 생활", "교칙·제도", "수업·교육과정", "학교 활동", "동아리", "학교 역사", "시설·공간", "기타"];
 const BLOCKED_PROFILE_TERMS = [
   "새끼","개새끼","씹새끼","씨발","시발","씨바","시바","씨팔","시팔","씨부랄","씨부럴","쌍년","쌍놈","병신","븅신","빙신","병쉰","지랄","염병","좆","좃","조까","좆까","개소리","느금마","니엄마","니애미","애미","애비","창녀","걸레","미친놈","미친년","또라이","꺼져","닥쳐","ㅅㅂ","ㅆㅂ","ㅂㅅ","ㅈㄹ",
-  "섹스","성교","성관계","자지","보지","음경","음부","성기","자위","딸딸이","야동","포르노","강간","성폭행","성추행","정액","오르가즘","유두","후장","애널"
+  "섹스","성교","성관계","자지","보지","음경","음부","성기","자위","딸딸이","야동","포르노","강간","성폭행","성추행","정액","오르가즘","유두","후장","애널",
+  "폰허브","포르노허브","pornhub","엑스비디오","xvideos","엑스엔엑스","xnxx","레드튜브","redtube","엑스햄스터","xhamster","온리팬스","onlyfans","성인사이트","음란사이트",
+  "인생도박","불법도박","도박","사설토토","불법토토","토토","먹튀","바카라","카지노","슬롯","파워볼","도박사이트"
 ];
 const SEED_DOCS = [
   { id:"seohyeon-high-school", title:"서현고등학교", category:"학교", summary:"경기도 성남시 분당구에 있는 서현고등학교에 관한 문서입니다.", body:"# 서현고등학교\n\n서현고등학교에 대한 정보를 함께 정리하는 문서입니다. 학생들이 알고 있는 학교의 모습과 유용한 정보를 차근차근 기록해 주세요.\n\n## 기본 정보\n\n학교와 관련한 공식 정보는 학교 홈페이지와 학교 공지에서 확인할 수 있습니다. 이 문서는 위키 이용자가 직접 내용을 보완해 나가는 공간입니다.\n\n## 학교 생활\n\n급식, 동아리, 학교 행사와 같은 정보는 확인된 내용과 기준 날짜를 함께 적어 주세요. 개인의 연락처나 공개를 원하지 않는 정보는 올리지 말아 주세요.\n\n## 문서 작성 안내\n\n내용을 수정할 때는 출처와 날짜를 덧붙이고, 다른 학생을 존중하는 표현을 사용해 주세요.", views:0, updatedAt:Date.now()-86400000, status:"published", author:"서현고위키", sample:true },
@@ -69,6 +72,10 @@ function nowLabel(time) { const age=Date.now()-time; if(age<3600000)return "방�
 function todayKey() { return new Date().toLocaleDateString("sv-SE",{timeZone:"Asia/Seoul"}); }
 function publishedDocs() { return state.docs.filter(d=>d.status!=="hidden"); }
 function liveDocs() { return publishedDocs().filter(d=>d.status==="published"); }
+function isAllowedLoginEmail(email="") {
+  const normalized=String(email).trim().toLowerCase();
+  return normalized===ADMIN_EMAIL || SCHOOL_EMAIL_PATTERN.test(normalized);
+}
 function saveLocal() {
   localStorage.setItem("seohyeonwiki.docs", JSON.stringify(state.docs));
   localStorage.setItem("seohyeonwiki.requests", JSON.stringify(state.requests));
@@ -120,6 +127,10 @@ async function setupFirebase() {
       state.searches={...state.searches,...shared};saveLocal();if(["home","trends"].includes(state.view))render();
     },err=>console.warn("검색어 랭킹 실시간 수신에 실패했습니다.",err));
     authSdk.onAuthStateChanged(authSdk.getAuth(app),async user=>{
+      if(user&&(!isAllowedLoginEmail(user.email)||!user.emailVerified)){
+        await authSdk.signOut(auth).catch(()=>{});
+        user=null;
+      }
       state.user=user || null;
       state.isAdmin=Boolean(user && user.emailVerified && user.email?.toLowerCase()===ADMIN_EMAIL);
       await syncEditorAuthorization();
@@ -899,7 +910,7 @@ function showLoginModal() {
     const workspaceButton=canOpenAdminWorkspace()?`<button class="button button-secondary" style="width:100%;margin:0 0 12px" data-action="open-admin">${getAdminAccess()?"관리자 센터 열기":"편집 제안 검토"}</button>`:"";
     modalOpen(`${modalHeader("내 계정", "서현고위키 계정 정보를 확인합니다.")}<div class="auth-user"><span class="avatar">${esc(state.user?.displayName?.slice(0,1)||"관")}</span><div><strong>${esc(state.user?.displayName||"관리자 미리보기")}</strong><small>${esc(state.user?.email||"로컬 데모 계정")}</small></div></div><button class="button button-primary" style="width:100%;margin:0 0 12px" data-action="new-doc">문서 작성</button>${workspaceButton}<div class="modal-actions"><button class="button button-secondary" data-action="sign-out">로그아웃</button><button class="button button-secondary" data-action="close-modal">닫기</button></div>`);return;
   }
-  modalOpen(`${modalHeader("서현고위키 로그인", "학번과 이름을 닉네임으로 사용합니다.")}<div class="auth-options">${isFirebaseConfigured?`<form id="loginProfileForm" class="login-profile-form"><div class="field"><label for="loginStudentNumber">학번</label><input id="loginStudentNumber" name="studentNumber" inputmode="numeric" autocomplete="off" maxlength="5" pattern="[0-9]{5}" placeholder="숫자 5자리를 입력해 주세요" required></div><div class="field"><label for="loginStudentName">이름</label><input id="loginStudentName" name="studentName" autocomplete="name" maxlength="24" pattern="[가-힣]+" placeholder="한글 이름만 입력해 주세요" required></div><div class="profile-visibility-note">닉네임은 <strong>학번 이름</strong> 형식이며, 작성한 문서와 토론에서 다른 이용자에게 표시됩니다.</div><label class="check-row profile-consent"><input type="checkbox" name="publicProfileConsent" required><span>학번과 이름이 작성자 닉네임으로 공개되는 것을 확인했습니다.</span></label><button class="auth-google-button" type="submit"><span class="auth-google-mark" aria-hidden="true">G</span><span>Google 계정으로 로그인</span></button></form>`:`<div class="modal-note auth-config-note">지금은 로컬 미리보기입니다. Firebase 설정 후 Google 로그인이 활성화됩니다.</div>`}<div class="auth-divider"><span>또는</span></div><button class="auth-write-card" type="button" data-action="new-doc"><span class="auth-write-icon" aria-hidden="true">${icons.doc}</span><span class="auth-write-copy"><strong>문서 작성하기</strong><small>${isFirebaseConfigured?"초안을 작성하고 저장할 때 로그인할 수 있어요.":"로컬 미리보기에서 문서를 작성할 수 있어요."}</small></span><span class="auth-write-arrow" aria-hidden="true">${icons.arrow}</span></button></div>`);
+  modalOpen(`${modalHeader("서현고위키 로그인", "학교 Google 계정의 학번과 이름을 입력해 주세요.")}<div class="auth-options">${isFirebaseConfigured?`<form id="loginProfileForm" class="login-profile-form"><div class="field"><label for="loginStudentNumber">학번</label><input id="loginStudentNumber" name="studentNumber" inputmode="numeric" autocomplete="off" maxlength="5" pattern="[0-9]{5}" placeholder="학교 이메일의 숫자 5자리"></div><div class="field"><label for="loginStudentName">이름</label><input id="loginStudentName" name="studentName" autocomplete="name" maxlength="24" pattern="[가-힣]+" placeholder="한글 이름만 입력해 주세요"></div><div class="profile-visibility-note">학교 계정은 <strong>25-학번@seohyun.hs.kr</strong> 형식이어야 하며, 입력한 학번이 계정과 일치해야 합니다. 학번과 이름은 작성자 닉네임으로 표시됩니다.</div><label class="check-row profile-consent"><input type="checkbox" name="publicProfileConsent"><span>학번과 이름이 작성자 닉네임으로 공개되는 것을 확인했습니다.</span></label><button class="auth-google-button" type="submit"><span class="auth-google-mark" aria-hidden="true">G</span><span>Google 계정으로 로그인</span></button></form>`:`<div class="modal-note auth-config-note">지금은 로컬 미리보기입니다. Firebase 설정 후 Google 로그인이 활성화됩니다.</div>`}<div class="auth-divider"><span>또는</span></div><button class="auth-write-card" type="button" data-action="new-doc"><span class="auth-write-icon" aria-hidden="true">${icons.doc}</span><span class="auth-write-copy"><strong>문서 작성하기</strong><small>${isFirebaseConfigured?"초안을 작성하고 저장할 때 로그인할 수 있어요.":"로컬 미리보기에서 문서를 작성할 수 있어요."}</small></span><span class="auth-write-arrow" aria-hidden="true">${icons.arrow}</span></button></div>`);
 }
 function normalizeProfileText(value="") {
   return String(value).normalize("NFKC").toLocaleLowerCase("ko-KR").replace(/[\s\p{P}\p{S}\p{Cf}]+/gu,"");
@@ -918,28 +929,35 @@ function rejectProfileInput(input,message) {
 async function googleLogin(form) {
   if(!state.firebase){toast("Firebase 설정을 먼저 완료해 주세요.");return;}
   const data=new FormData(form),studentNumber=String(data.get("studentNumber")||"").trim(),studentName=String(data.get("studentName")||"").trim().replace(/\s+/g," ");
-  if(!/^\d{5}$/.test(studentNumber)){rejectProfileInput(form.querySelector("#loginStudentNumber"),"학번은 숫자 5자리로 입력해 주세요.");return;}
-  if(hasBlockedProfileTerm(studentName)){rejectProfileInput(form.querySelector("#loginStudentName"),"비속어·성적 표현은 이름으로 사용할 수 없어요. 이름을 다시 작성해 주세요.");return;}
-  if(!/^[가-힣]{1,24}$/.test(studentName)){rejectProfileInput(form.querySelector("#loginStudentName"),"이름은 한글만 입력해 주세요. 이름을 다시 작성해 주세요.");return;}
-  if(data.get("publicProfileConsent")!=="on"){toast("닉네임 공개 안내를 확인해 주세요.");return;}
-  const nickname=`${studentNumber} ${studentName}`,submit=form.querySelector('button[type="submit"]');
+  const submit=form.querySelector('button[type="submit"]');
   if(submit){submit.disabled=true;submit.querySelector("span:last-child").textContent="로그인 중…";}
-  let signedInUser=null;
+  let signedInUser=null,failureMessage="Google 로그인을 완료하지 못했어요. 다시 시도해 주세요.";
   try {
     const {GoogleAuthProvider,signInWithPopup,updateProfile,reload}=state.firebase.authSdk;
     const provider=new GoogleAuthProvider();provider.setCustomParameters({prompt:"select_account"});
     const credential=await signInWithPopup(state.firebase.auth,provider);signedInUser=credential.user;
-    await updateProfile(signedInUser,{displayName:nickname});
+    const email=String(signedInUser.email||"").trim().toLowerCase();
+    if(!signedInUser.emailVerified){failureMessage="Google에서 이메일을 인증한 뒤 다시 로그인해 주세요.";throw new Error("unverified-email");}
+    if(email!==ADMIN_EMAIL){
+      const schoolEmail=email.match(SCHOOL_EMAIL_PATTERN);
+      if(!schoolEmail){failureMessage="25-학번@seohyun.hs.kr 형식의 서현고 학교 계정으로 로그인해 주세요.";throw new Error("school-account-required");}
+      if(!/^\d{5}$/.test(studentNumber)){failureMessage="학번은 숫자 5자리로 입력해 주세요.";throw new Error("invalid-student-number");}
+      if(studentNumber!==schoolEmail[1]){failureMessage="입력한 학번이 로그인한 학교 계정의 학번과 달라요.";throw new Error("student-number-mismatch");}
+      if(hasBlockedProfileTerm(studentName)){failureMessage="비속어·성적 표현이나 부적절한 사이트 이름은 닉네임으로 사용할 수 없어요.";throw new Error("blocked-profile-name");}
+      if(!/^[가-힣]{1,24}$/.test(studentName)){failureMessage="이름은 한글만 입력해 주세요.";throw new Error("invalid-student-name");}
+      if(data.get("publicProfileConsent")!=="on"){failureMessage="학번과 이름이 닉네임으로 공개되는 안내에 동의해 주세요.";throw new Error("profile-consent-required");}
+      await updateProfile(signedInUser,{displayName:`${studentNumber} ${studentName}`});
+    }
     await reload(signedInUser);state.user=state.firebase.auth.currentUser||signedInUser;
     try{await cloudSaveUserProfile(state.user);}catch(profileError){console.warn("닉네임 프로필 저장에 실패했습니다.",profileError);}
     state.isAdmin=Boolean(state.user?.emailVerified&&state.user.email?.toLowerCase()===ADMIN_EMAIL);state.demoAdmin=false;
     await syncEditorAuthorization();
-    updateAccountButton();modalClose();render();toast("로그인했어요. 학번과 이름을 계정 닉네임으로 저장했습니다.");
+    updateAccountButton();modalClose();render();toast("로그인했어요.");
   }
   catch(err){
     console.error(err);
     if(signedInUser){await state.firebase.authSdk.signOut(state.firebase.auth).catch(()=>{});state.user=null;state.isAdmin=false;}
-    toast("로그인에 실패했어요. 입력한 정보를 확인하고 다시 시도해 주세요.");
+    toast(failureMessage);
     if(submit&&form.isConnected){submit.disabled=false;submit.querySelector("span:last-child").textContent="Google 계정으로 로그인";}
   }
 }
