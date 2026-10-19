@@ -8,7 +8,7 @@ const BLOCKED_PROFILE_TERMS = [
   "새끼","개새끼","씹새끼","씨발","시발","씨바","시바","씨팔","시팔","씨부랄","씨부럴","쌍년","쌍놈","병신","븅신","빙신","병쉰","지랄","염병","좆","좃","조까","좆까","개소리","느금마","니엄마","니애미","애미","애비","창녀","걸레","미친놈","미친년","또라이","꺼져","닥쳐","ㅅㅂ","ㅆㅂ","ㅂㅅ","ㅈㄹ",
   "섹스","성교","성관계","자지","보지","음경","음부","성기","자위","딸딸이","야동","포르노","강간","성폭행","성추행","정액","오르가즘","유두","후장","애널",
   "폰허브","포르노허브","pornhub","엑스비디오","xvideos","엑스엔엑스","xnxx","레드튜브","redtube","엑스햄스터","xhamster","온리팬스","onlyfans","성인사이트","음란사이트",
-  "인생도박","불법도박","도박","사설토토","불법토토","토토","먹튀","바카라","카지노","슬롯","파워볼","도박사이트"
+  "인생도박","불법도박","사설도박","온라인도박","도박중독","도박장","도박","사행성","사설토토","불법토토","스포츠토토","토토사이트","토토","먹튀사이트","먹튀","사설카지노","온라인카지노","카지노사이트","카지노","바카라사이트","바카라","슬롯머신","슬롯","룰렛","파워볼","불법베팅","사설베팅","스포츠베팅","베팅","불법배팅","사설배팅","스포츠배팅","배팅","홀덤","경마도박","경정","경륜","바다이야기","도박사이트","gambling","casino","betting","sportsbook","sportsbet","baccarat","roulette","slotmachine"
 ];
 const SEED_DOCS = [
   { id:"seohyeon-high-school", title:"서현고등학교", category:"학교", summary:"경기도 성남시 분당구에 있는 서현고등학교에 관한 문서입니다.", body:"# 서현고등학교\n\n서현고등학교에 대한 정보를 함께 정리하는 문서입니다. 학생들이 알고 있는 학교의 모습과 유용한 정보를 차근차근 기록해 주세요.\n\n## 기본 정보\n\n학교와 관련한 공식 정보는 학교 홈페이지와 학교 공지에서 확인할 수 있습니다. 이 문서는 위키 이용자가 직접 내용을 보완해 나가는 공간입니다.\n\n## 학교 생활\n\n급식, 동아리, 학교 행사와 같은 정보는 확인된 내용과 기준 날짜를 함께 적어 주세요. 개인의 연락처나 공개를 원하지 않는 정보는 올리지 말아 주세요.\n\n## 문서 작성 안내\n\n내용을 수정할 때는 출처와 날짜를 덧붙이고, 다른 학생을 존중하는 표현을 사용해 주세요.", views:0, updatedAt:Date.now()-86400000, status:"published", author:"서현고위키", sample:true },
@@ -24,7 +24,7 @@ const state = {
   view:"home", query:"", docs:[], user:null, isAdmin:false, demoAdmin:false,
   config:{...DEFAULT_LIMITS}, requests:[], editRequests:[], userProfiles:[], editorPermissions:{}, editorAccess:{canApproveEditRequests:false,canManageRestrictions:false}, reports:[], searches:{}, discussions:[], changes:[], chat:[], adminTab:"overview",
   rankPeriod:"today", changeFilter:"all", discussionTab:"open", discussionId:null, specialTool:"stale", editorId:null, editingDraft:null, docId:null, results:[], searchSuggestions:[], searchSuggestionIndex:-1, firebase:null, gemini:null, searchUnsubscribe:null,
-  toastTimer:null, pendingApproval:null, communityUnsubscribers:[], editorPermissionUnsubscribe:null, editRequestsUnsubscribe:null, adminProfilesUnsubscribe:null, adminPermissionsUnsubscribe:null
+  toastTimer:null, pendingApproval:null, communityUnsubscribers:[], editorPermissionUnsubscribe:null, editRequestsUnsubscribe:null, adminRequestsUnsubscribe:null, adminProfilesUnsubscribe:null, adminPermissionsUnsubscribe:null
 };
 let recommendationTimer=null;
 let featuredRecommendationCache={slot:null,id:null};
@@ -60,6 +60,7 @@ const icons = {
   recommend:'<svg viewBox="0 0 24 24"><path d="M12 3.5 14.7 9.3 20.5 12 14.7 14.7 12 20.5 9.3 14.7 3.5 12 9.3 9.3 12 3.5Z"></path></svg>',
   search:'<svg viewBox="0 0 24 24"><circle cx="10.8" cy="10.8" r="6.6"></circle><path d="m16 16 4.3 4.3"></path></svg>',
   doc:'<svg viewBox="0 0 24 24"><path d="M12 6.5c-2.2-1.7-5.1-2.1-8-1.4v13.2c2.9-.7 5.8-.3 8 1.4m0-13.2c2.2-1.7 5.1-2.1 8-1.4v13.2c-2.9-.7-5.8-.3-8 1.4m0-13.2v13.2"></path></svg>',
+  shield:'<svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M12 3 20 6v5c0 5-3.4 8-8 10-4.6-2-8-5-8-10V6l8-3Z"></path><path d="m9 12 2 2 4-4"></path></svg>',
   spark:'<svg viewBox="0 0 24 24"><path d="m12 3 1.9 5.8L20 11l-6.1 2.2L12 19l-1.9-5.8L4 11l6.1-2.2L12 3Z"></path><path d="m19 15 .9 2.1L22 18l-2.1.9L19 21l-.9-2.1L16 18l2.1-.9L19 15Z"></path></svg>',
   arrow:'<svg viewBox="0 0 24 24"><path d="M5 12h14m-6-6 6 6-6 6"></path></svg>',
   plus:'<svg viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"></path></svg>',
@@ -70,7 +71,7 @@ const icons = {
 function esc(value="") { return String(value).replace(/[&<>"']/g, ch => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;", "'":"&#39;"}[ch])); }
 function nowLabel(time) { const age=Date.now()-time; if(age<3600000)return "방금 전"; if(age<86400000)return `${Math.floor(age/3600000)}시간 전`; if(age<86400000*2)return "어제"; return `${Math.floor(age/86400000)}일 전`; }
 function todayKey() { return new Date().toLocaleDateString("sv-SE",{timeZone:"Asia/Seoul"}); }
-function publishedDocs() { return state.docs.filter(d=>d.status!=="hidden"); }
+function publishedDocs() { return state.docs.filter(d=>!d.sample&&d.status!=="hidden"); }
 function liveDocs() { return publishedDocs().filter(d=>d.status==="published"); }
 function isAllowedLoginEmail(email="") {
   const normalized=String(email).trim().toLowerCase();
@@ -145,6 +146,7 @@ async function setupFirebase() {
 async function syncEditorAuthorization(){
   state.editorPermissionUnsubscribe?.();state.editorPermissionUnsubscribe=null;
   state.editRequestsUnsubscribe?.();state.editRequestsUnsubscribe=null;
+  state.adminRequestsUnsubscribe?.();state.adminRequestsUnsubscribe=null;
   state.adminProfilesUnsubscribe?.();state.adminProfilesUnsubscribe=null;
   state.adminPermissionsUnsubscribe?.();state.adminPermissionsUnsubscribe=null;
   state.editorAccess={canApproveEditRequests:false,canManageRestrictions:false};
@@ -169,6 +171,10 @@ async function syncEditorAuthorization(){
     applyPermission(await getDoc(permissionRef));
     state.editorPermissionUnsubscribe=onSnapshot(permissionRef,applyPermission,error=>console.warn("편집 권한 실시간 동기화에 실패했습니다.",error));
     if(state.isAdmin){
+      state.adminRequestsUnsubscribe=onSnapshot(collection(state.firebase.db,"limitRequests"),snapshot=>{
+        state.requests=snapshot.docs.map(item=>{const data=item.data();return {...data,id:item.id,createdAt:data.createdAt?.toMillis?.()||data.createdAt,reviewedAt:data.reviewedAt?.toMillis?.()||data.reviewedAt};});saveLocal();
+        if(state.view==="admin"&&modalWrap.hidden&&!document.activeElement?.matches("input,textarea"))render();
+      },error=>console.warn("작성 승인 요청 실시간 동기화에 실패했습니다.",error));
       const [profiles,permissions]=await Promise.all([getDocs(collection(state.firebase.db,"userProfiles")),getDocs(collection(state.firebase.db,"editorPermissions"))]);
       state.userProfiles=profiles.docs.map(item=>({id:item.id,...item.data()}));
       state.editorPermissions=Object.fromEntries(permissions.docs.map(item=>[item.id,item.data()]));
@@ -200,8 +206,6 @@ async function syncDocsFromCloud() {
     if(!snapshot.empty)localStorage.setItem("seohyeonwiki.cloudDocsInitialized","1");
     await syncSearchesFromCloud();
     if(state.isAdmin) {
-      const snap=await getDocs(collection(state.firebase.db,"limitRequests"));
-      state.requests=snap.docs.map(item=>({id:item.id,...item.data()}));
       const reportSnap=await getDocs(collection(state.firebase.db,"reports"));
       state.reports=reportSnap.docs.map(item=>({id:item.id,...item.data()}));
     }
@@ -241,10 +245,18 @@ async function cloudSetEditorPermission(uid,profile,granted){
   await setDoc(ref,{uid,email:profile.email||"",displayName:profile.displayName||"",canApproveEditRequests:true,canManageRestrictions:true,grantedBy:state.user.uid,grantedAt:serverTimestamp()});
 }
 async function cloudRequest(request) {
-  if(!state.firebase)return;
+  if(!state.firebase)throw new Error("Firebase가 연결되어 있지 않습니다.");
   const {collection,addDoc,serverTimestamp}=state.firebase.dbSdk;
-  const ref=await addDoc(collection(state.firebase.db,"limitRequests"),{...request,createdAt:serverTimestamp(),ownerUid:state.user?.uid||null,status:"pending"});
+  const {id,...data}=request;
+  const ref=await addDoc(collection(state.firebase.db,"limitRequests"),{...data,createdAt:serverTimestamp(),ownerUid:state.user?.uid||null,status:"pending"});
   request.id=ref.id;
+}
+async function cloudReviewLimitRequest(request,doc,approved){
+  const {doc:docRef,writeBatch,serverTimestamp}=state.firebase.dbSdk;
+  const batch=writeBatch(state.firebase.db),requestRef=docRef(state.firebase.db,"limitRequests",request.id);
+  batch.update(requestRef,{status:approved?"approved":"rejected",reviewedAt:serverTimestamp(),reviewedBy:state.user?.uid||"demo-admin"});
+  if(approved&&doc){const {id,views,...data}=doc;batch.set(docRef(state.firebase.db,"docs",id),{...data,updatedAt:serverTimestamp(),updatedBy:state.user?.uid||"demo-admin"},{merge:true});}
+  await batch.commit();
 }
 function mergeById(remote,local) {
   const merged=new Map(remote.map(item=>[item.id,item]));
@@ -330,6 +342,7 @@ function navigationUrl() {
   return url.href;
 }
 function navigate(view,extra={}) {
+  if(view==="editor"&&!state.user){toast("문서를 작성하거나 편집하려면 먼저 로그인해 주세요.");showLoginModal();return;}
   state.view=view;
   Object.assign(state,extra);
   window.history.pushState(navigationSnapshot(),"",navigationUrl());
@@ -337,6 +350,12 @@ function navigate(view,extra={}) {
   window.scrollTo({top:0,behavior:"smooth"});
 }
 function render() {
+  if(state.view==="editor"&&!state.user){
+    state.view="home";state.editorId=null;state.editingDraft=null;state.pendingChangeKind=null;
+    window.history.replaceState(navigationSnapshot(),"",navigationUrl());
+    modalClose();
+    requestAnimationFrame(()=>{toast("문서를 작성하거나 편집하려면 먼저 로그인해 주세요.");showLoginModal();});
+  }
   const searchForm=document.querySelector("#heroSearchForm"),topbarSearchMount=document.querySelector("#topbarSearchMount");
   if(searchForm&&topbarSearchMount)topbarSearchMount.append(searchForm);
   document.body.classList.toggle("dark",localStorage.getItem("seohyeonwiki.theme")==="dark");
@@ -357,7 +376,11 @@ function render() {
     if(!selectedCategory){const placeholder=document.createElement("option");placeholder.value="";placeholder.disabled=true;placeholder.selected=true;placeholder.textContent="분류를 선택해 주세요";categorySelect.prepend(placeholder);}
   }
   const editorCurrent=state.editorId?state.docs.find(doc=>doc.id===state.editorId):null;
-  if(editorCurrent?.editRestricted&&!state.isAdmin){const saveButton=main.querySelector('#editorForm button[type="submit"]');if(saveButton)saveButton.textContent="편집 요청 제출";const notice=document.createElement("div");notice.className="modal-note";notice.textContent="이 문서는 바로 바뀌지 않아요. 저장하면 편집 제안으로 접수되고 권한 있는 이용자가 승인한 뒤 반영됩니다.";main.querySelector("#editorForm .admin-callout")?.after(notice);}
+  if(state.view==="editor"){
+    const saveButton=main.querySelector('#editorForm button[type="submit"]');
+    if(saveButton){const body=main.querySelector("#docBody")?.value||"";saveButton.textContent=editorSubmitLabel(editorCurrent,body.length>state.config.chars||countImages(body)>state.config.images||countVideos(body)>state.config.videos);}
+    if(editorCurrent?.editRestricted&&!state.isAdmin){const notice=document.createElement("div");notice.className="modal-note";notice.textContent="이 문서는 바로 바뀌지 않아요. 저장하면 편집 제안으로 접수되고 권한 있는 이용자가 승인한 뒤 반영됩니다.";main.querySelector("#editorForm .admin-callout")?.after(notice);}
+  }
   const homeSearchMount=main.querySelector("#homeSearchMount");
   if(searchForm){
     const field=searchForm.querySelector(".topbar-search-field, .hero-search");
@@ -489,36 +512,27 @@ function setSearchSuggestionActive(index){
   document.querySelector("#heroSearchInput")?.setAttribute("aria-activedescendant",options[state.searchSuggestionIndex].id);
   options[state.searchSuggestionIndex].scrollIntoView({block:"nearest"});
 }
-function markdownHtml(text="") {
-  const output=[];let listItems=[];
+function markdownHtml(text="",headingIds=null,tocMarkup=null) {
+  const headings=headingIds===null?documentHeadings(text):null;
+  if(headingIds===null)headingIds=headings.map(heading=>heading.id);
+  if(tocMarkup===null)tocMarkup=renderTocMarkup(headings||documentHeadings(text));
+  const output=[];let listItems=[],headingIndex=0;
+  const renderHeading=(level,value)=>{const id=headingIds?.[headingIndex++];return `<h${level}${id?` id="${esc(id)}"` : ""}>${inlineMarkdown(value)}</h${level}>`;};
   const flushList=()=>{if(listItems.length){output.push(`<ul class="wiki-list">${listItems.map(item=>`<li>${inlineMarkdown(item)}</li>`).join("")}</ul>`);listItems=[];}};
   const splitValue=value=>{const index=value.indexOf("|");return index<0?[value.trim(),""]:[value.slice(0,index).trim(),value.slice(index+1).trim()];};
-  const lines=text.split("\n");
+  const lines=String(text).split(/\r?\n/).filter(line=>!/^\s*\[\/?접기\].*$/.test(line.trim()));
   for(let lineIndex=0;lineIndex<lines.length;lineIndex++){
     const line=lines[lineIndex];
     const trimmed=line.trim();
-    const foldStart=trimmed.match(/^\[접기\]\s*(.*)$/);
-    if(foldStart){
-      flushList();
-      let depth=1,closeIndex=lineIndex+1;
-      for(;closeIndex<lines.length;closeIndex++){
-        const candidate=lines[closeIndex].trim();
-        if(/^\[접기\]\s*.*$/.test(candidate))depth++;
-        else if(candidate==="[/접기]"&&--depth===0)break;
-      }
-      const title=foldStart[1].trim()||"자세히 보기";
-      output.push(`<details class="wiki-fold"><summary><span class="wiki-fold-heading">${esc(title)}</span><span class="wiki-fold-toggle">[ 펼치기 · 접기 ]</span></summary><div class="wiki-fold-content">${markdownHtml(lines.slice(lineIndex+1,closeIndex).join("\n"))}</div></details>`);
-      lineIndex=closeIndex<lines.length?closeIndex:lines.length;
-      continue;
-    }
     if(!trimmed){flushList();continue;}
+    if(trimmed==="[목차]"){flushList();output.push(tocMarkup);continue;}
     const command=trimmed.match(/^\[(제목|소제목|강조|목록|인용|문서|링크|사진|영상|선)\]\s*(.*)$/);
     if(command){
       const [,kind,value]=command;
       if(kind==="목록"){listItems.push(value);continue;}
       flushList();
-      if(kind==="제목"){output.push(`<h2>${inlineMarkdown(value)}</h2>`);continue;}
-      if(kind==="소제목"){output.push(`<h3>${inlineMarkdown(value)}</h3>`);continue;}
+      if(kind==="제목"){output.push(renderHeading(2,value));continue;}
+      if(kind==="소제목"){output.push(renderHeading(3,value));continue;}
       if(kind==="강조"){output.push(`<p class="wiki-callout">${inlineMarkdown(value)}</p>`);continue;}
       if(kind==="인용"){output.push(`<blockquote class="wiki-quote">${inlineMarkdown(value)}</blockquote>`);continue;}
       if(kind==="선"){output.push("<hr class=\"wiki-divider\">");continue;}
@@ -540,9 +554,9 @@ function markdownHtml(text="") {
       }
     }
     flushList();
-    if(trimmed.startsWith("### "))output.push(`<h3>${inlineMarkdown(trimmed.slice(4))}</h3>`);
-    else if(trimmed.startsWith("## "))output.push(`<h2>${inlineMarkdown(trimmed.slice(3))}</h2>`);
-    else if(trimmed.startsWith("# "))output.push(`<h2>${inlineMarkdown(trimmed.slice(2))}</h2>`);
+    if(trimmed.startsWith("### "))output.push(renderHeading(3,trimmed.slice(4)));
+    else if(trimmed.startsWith("## "))output.push(renderHeading(2,trimmed.slice(3)));
+    else if(trimmed.startsWith("# "))output.push(renderHeading(2,trimmed.slice(2)));
     else if(/^[-*] /.test(trimmed))output.push(`<p>• ${inlineMarkdown(trimmed.slice(2))}</p>`);
     else output.push(`<p>${inlineMarkdown(trimmed)}</p>`);
   }
@@ -557,15 +571,30 @@ function inlineMarkdown(line) {
   safe=safe.replace(/(https?:\/\/[^\s<]+)/g,'<a href="$1" target="_blank" rel="noopener noreferrer" class="media-url">$1</a>');
   return safe.replace(/\*\*(.+?)\*\*/g,"<strong>$1</strong>").replace(/`([^`]+)`/g,"<code>$1</code>");
 }
-function getDoc(id) { return publishedDocs().find(d=>d.id===id); }
+function getDoc(id) { return publishedDocs().find(d=>d.id===id)||(getAdminAccess()?state.docs.find(d=>d.id===id):null); }
+function documentHeadings(text="") {
+  const headings=[];
+  for(const rawLine of String(text).split(/\r?\n/)){
+    const line=rawLine.trim();
+    const custom=line.match(/^\[(제목|소제목)\]\s*(.*)$/);
+    const markdown=line.match(/^(#{1,3})\s+(.+)$/);
+    if(custom)headings.push({level:custom[1]==="소제목"?3:2,title:custom[2].trim()||"제목 없음"});
+    else if(markdown)headings.push({level:markdown[1].length===3?3:2,title:markdown[2].trim()});
+  }
+  return headings.map((heading,index)=>({...heading,id:`doc-section-${index+1}`}));
+}
+function renderTocMarkup(headings=[]) {
+  if(!headings.length)return "";
+  return `<nav class="article-toc article-toc-top" aria-label="문서 목차"><div class="toc-title">목차</div><div class="toc-items">${headings.map((heading,index)=>`<button type="button" class="toc-item${heading.level===3?" level-3":""}" data-action="toc-jump" data-heading-id="${heading.id}"><span class="toc-number">${index+1}</span><span>${esc(heading.title)}</span></button>`).join("")}</div></nav>`;
+}
 function renderArticle() {
   const doc=getDoc(state.docId);if(!doc){state.view="home";return renderHome();}
-  const toc=(doc.body.match(/^(?:#{1,3} .+|\[(?:제목|소제목)\] .+)$/gm)||[]).map(h=>h.replace(/^#+ /,"").replace(/^\[(?:제목|소제목)\]\s*/,"")).slice(0,8);
-  const tocMarkup=`<nav class="panel article-toc article-toc-top" aria-label="문서 목차"><div class="toc-title">목차</div><div class="toc-items">${toc.length?toc.map((h,i)=>`<div class="toc-item">${i+1}. ${esc(h)}</div>`).join(""):'<div class="toc-item">내용</div>'}</div></nav>`;
+  const toc=documentHeadings(doc.body);
+  const tocMarkup=renderTocMarkup(toc),hasInlineToc=/^\s*\[목차\]\s*$/m.test(String(doc.body||""));
   const mediaHtml=[...(doc.images||[]).map(url=>`<a class="media-card" href="${esc(url)}" target="_blank" rel="noopener noreferrer"><img src="${esc(url)}" alt="문서 첨부 이미지" loading="lazy"></a>`),...(doc.videos||[]).map(url=>`<a class="media-link" href="${esc(url)}" target="_blank" rel="noopener noreferrer">동영상 보기 ${icons.arrow}</a>`)].join("");
-  const restrictionBadge=doc.editRestricted?'<span class="tag">편집 제안 승인 필요</span>':"";
+  const restrictionBadge=doc.editRestricted?'<span class="tag">편집 제안 승인 필요</span>':'<span class="tag">학교 계정 누구나 편집 가능</span>';
   const restrictionAction=canManageEditRestrictions()?`<button class="button button-secondary" data-action="toggle-edit-restriction" data-id="${esc(doc.id)}">${doc.editRestricted?"편집 제한 해제":"편집 제한 설정"}</button>`:"";
-  return `<div class="content-page"><div class="article-layout"><article class="panel article-main"><div class="breadcrumbs"><button data-view="home">홈</button> › <button data-action="search-category" data-category="${esc(doc.category||"문서")}">${esc(doc.category||"문서")}</button></div><h1 class="article-title">${esc(doc.title)}</h1><div class="article-meta"><span>${esc(doc.author||"서현고위키 이용자")}</span><span>·</span><span>최근 수정 ${nowLabel(doc.updatedAt||Date.now())}</span><span>·</span><span>조회 ${doc.views||0}</span>${doc.sample?'<span class="tag">예시 문서</span>':""}${restrictionBadge}</div>${tocMarkup}<div class="article-body">${markdownHtml(doc.body)}${mediaHtml?`<div class="article-media">${mediaHtml}</div>`:""}</div><div class="article-side-actions"><button class="button button-secondary" data-action="edit-doc" data-id="${esc(doc.id)}">${doc.editRestricted?"편집 제안":"문서 편집"}</button>${restrictionAction}<button class="button button-secondary" data-action="report-doc" data-id="${esc(doc.id)}">신고</button>${canDeleteDocuments()?`<button class="button button-danger" data-action="delete-doc" data-id="${esc(doc.id)}">문서 영구 삭제</button>`:""}</div></article></div></div>`;
+  return `<div class="content-page"><div class="article-layout"><article class="panel article-main"><div class="breadcrumbs"><button data-view="home">홈</button> › <button data-action="search-category" data-category="${esc(doc.category||"문서")}">${esc(doc.category||"문서")}</button></div><h1 class="article-title">${esc(doc.title)}</h1><div class="article-meta"><span>${esc(doc.author||"서현고위키 이용자")}</span><span>·</span><span>최근 수정 ${nowLabel(doc.updatedAt||Date.now())}</span><span>·</span><span>조회 ${doc.views||0}</span>${doc.status==="hidden"?'<span class="tag">숨김 문서</span>':""}${doc.sample?'<span class="tag">예시 문서</span>':""}${restrictionBadge}</div>${hasInlineToc?"":tocMarkup}<div class="article-body">${markdownHtml(doc.body,toc.map(heading=>heading.id),tocMarkup)}${mediaHtml?`<div class="article-media">${mediaHtml}</div>`:""}</div><div class="article-side-actions"><button class="button button-secondary" data-action="edit-doc" data-id="${esc(doc.id)}">${state.user?(doc.editRestricted?"편집 제안":"문서 편집"):"로그인 후 편집"}</button>${restrictionAction}<button class="button button-secondary" data-action="report-doc" data-id="${esc(doc.id)}">신고</button>${canDeleteDocuments(doc)?`<button class="button button-danger" data-action="delete-doc" data-id="${esc(doc.id)}">문서 영구 삭제</button>`:""}</div></article></div></div>`;
 }
 function renderSearch() {
   const query=String(state.query||"").trim();
@@ -582,7 +611,13 @@ function renderEditor() {
   const chars=draft.body.length, imageCount=countImages(draft.body), videoCount=countVideos(draft.body);
   const over=chars>state.config.chars||imageCount>state.config.images||videoCount>state.config.videos;
   const near=chars>state.config.chars*.8;
-  return `<div class="content-page"><div class="page-title-row"><div><p class="eyebrow">Write together</p><h1 class="page-title">${current?"문서 편집":"새 문서 만들기"}</h1><p class="page-subtitle">확인한 정보를 알기 쉽게 정리해 주세요.</p></div></div><form class="panel editor-panel" id="editorForm"><div class="admin-callout">${icons.shield}<span>비용을 아끼기 위해 문서는 <strong>${state.config.chars.toLocaleString()}자</strong>, 사진 링크 <strong>${state.config.images}개</strong>, 동영상 링크 <strong>${state.config.videos}개</strong>까지 저장할 수 있어요. 제한을 넘는 편집은 관리자의 승인을 요청합니다.</span></div><div class="field"><label for="docTitle">문서 제목</label><input id="docTitle" name="title" required maxlength="80" placeholder="예: 동아리, 급식, 학교 행사" value="${esc(draft.title)}"></div><div class="field"><label for="docCategory">분류</label><select id="docCategory" name="category">${WIKI_CATEGORIES.map(category=>`<option value="${esc(category)}" ${draft.category===category?"selected":""}>${esc(category)}</option>`).join("")}</select></div><div class="field"><label for="docBody">본문</label><div class="editor-toolbar"><button type="button" data-action="insert-markup" data-markup="[사진] https://주소 | 사진 설명">사진 링크</button><button type="button" data-action="insert-markup" data-markup="[영상] https://www.youtube.com/watch?v=">동영상 링크</button></div><details class="editor-markup-help"><summary>작성 문법 보기</summary><div class="editor-markup-content"><p>접기 문법은 시작과 끝 기호를 한 쌍으로 입력해요.</p><div class="editor-markup-grid"><span><code>[제목] 제목</code><small>큰 제목</small></span><span><code>[소제목] 제목</code><small>작은 제목</small></span><span><code>[강조] 내용</code><small>중요한 문장</small></span><span><code>[목록] 항목</code><small>목록 (여러 줄 연속 입력)</small></span><span><code>[인용] 문장</code><small>인용문</small></span><span><code>[문서] 문서명 | 표시</code><small>위키 문서 연결</small></span><span><code>[링크] 주소 | 설명</code><small>외부 링크</small></span><span><code>[사진] 주소 | 설명</code><small>사진 삽입</small></span><span><code>[영상] 주소</code><small>영상 링크</small></span><span><code>[선]</code><small>구분선</small></span><span><code>[접기] 제목</code><small>접을 영역 시작</small></span><span><code>[/접기]</code><small>접을 영역 끝</small></span></div></details><textarea id="docBody" name="body" required placeholder="[제목] 문서 제목\n\n[소제목] 소개\n\n확인된 내용을 작성해 주세요.">${esc(draft.body)}</textarea><span class="field-hint">미디어는 링크로 삽입하며 파일을 직접 업로드하지 않습니다. 사람을 식별할 수 있는 사진·개인 정보는 올리지 마세요.</span></div><div class="limits-row"><span class="limit-chip">글자 <strong>${chars.toLocaleString()} / ${state.config.chars.toLocaleString()}</strong></span><span class="limit-chip">사진 <strong>${imageCount} / ${state.config.images}</strong></span><span class="limit-chip">동영상 <strong>${videoCount} / ${state.config.videos}</strong></span><span class="limit-count ${over?"over":near?"near":""}">${over?"관리자 승인 필요":near?"제한에 가까워요":"저장 공간 절약 모드"}</span></div><div class="editor-actions"><span class="editor-actions-left">문서는 저장 후 검색과 AI 답변에 반영됩니다.</span><div class="editor-actions-right"><button type="submit" class="button button-primary">${over?"관리자에게 승인 요청":"문서 저장"}</button></div></div></form></div>`;
+  const approvalInfo=!current?"새 문서는 관리자 승인 후 공개됩니다.":current?.editRestricted&&!state.isAdmin?"이 문서는 편집 제안을 제출하고 권한 있는 이용자의 승인을 받아야 반영됩니다.":"일반 문서는 작성자가 아니어도 학교 계정으로 편집할 수 있고 저장 즉시 반영됩니다.";
+  return `<div class="content-page"><div class="page-title-row"><div><p class="eyebrow">Write together</p><h1 class="page-title">${current?"문서 편집":"새 문서 만들기"}</h1><p class="page-subtitle">확인한 정보를 알기 쉽게 정리해 주세요.</p></div></div><form class="panel editor-panel" id="editorForm"><div class="admin-callout">${icons.shield}<span>${approvalInfo} 글자 <strong>${state.config.chars.toLocaleString()}자</strong>, 사진 링크 <strong>${state.config.images}개</strong>, 동영상 링크 <strong>${state.config.videos}개</strong> 제한을 넘긴 편집도 승인 후 반영됩니다.</span></div><div class="field"><label for="docTitle">문서 제목</label><input id="docTitle" name="title" required maxlength="80" placeholder="예: 동아리, 급식, 학교 행사" value="${esc(draft.title)}"></div><div class="field"><label for="docCategory">분류</label><select id="docCategory" name="category">${WIKI_CATEGORIES.map(category=>`<option value="${esc(category)}" ${draft.category===category?"selected":""}>${esc(category)}</option>`).join("")}</select></div><div class="field"><label for="docBody">본문</label><div class="editor-toolbar"><button type="button" data-action="insert-markup" data-markup="[사진] https://주소 | 사진 설명">사진 링크</button><button type="button" data-action="insert-markup" data-markup="[영상] https://www.youtube.com/watch?v=">동영상 링크</button></div><details class="editor-markup-help"><summary>작성 문법 보기</summary><div class="editor-markup-content"><p>제목을 작성한 뒤 [목차]를 원하는 위치에 넣으면 그 자리에 목차가 표시돼요.</p><div class="editor-markup-grid"><span><code>[제목] 제목</code><small>큰 제목</small></span><span><code>[소제목] 제목</code><small>작은 제목</small></span><span><code>[강조] 내용</code><small>중요한 문장</small></span><span><code>[목차]</code><small>이 위치에 목차 표시</small></span><span><code>[인용] 문장</code><small>인용문</small></span><span><code>[문서] 문서명 | 표시</code><small>위키 문서 연결</small></span><span><code>[링크] 주소 | 설명</code><small>외부 링크</small></span><span><code>[사진] 주소 | 설명</code><small>사진 삽입</small></span><span><code>[영상] 주소</code><small>영상 링크</small></span><span><code>[선]</code><small>구분선</small></span></div></details><textarea id="docBody" name="body" required placeholder="[제목] 문서 제목\n\n[소제목] 소개\n\n확인된 내용을 작성해 주세요.">${esc(draft.body)}</textarea><span class="field-hint">미디어는 링크로 삽입하며 파일을 직접 업로드하지 않습니다. 사람을 식별할 수 있는 사진·개인 정보는 올리지 마세요.</span></div><div class="limits-row"><span class="limit-chip">글자 <strong>${chars.toLocaleString()} / ${state.config.chars.toLocaleString()}</strong></span><span class="limit-chip">사진 <strong>${imageCount} / ${state.config.images}</strong></span><span class="limit-chip">동영상 <strong>${videoCount} / ${state.config.videos}</strong></span><span class="limit-count ${over?"over":near?"near":""}">${over?"관리자 승인 필요":near?"제한에 가까워요":"저장 공간 절약 모드"}</span></div><div class="editor-actions"><span class="editor-actions-left">문서는 저장 후 검색과 AI 답변에 반영됩니다.</span><div class="editor-actions-right"><button type="submit" class="button button-primary">${editorSubmitLabel(current,over)}</button></div></div></form></div>`;
+}
+function editorSubmitLabel(current,over){
+  if(current?.editRestricted&&!state.isAdmin)return "편집 요청 제출";
+  if(!current||over&&!getAdminAccess())return "관리자 승인 요청";
+  return over?"제한 초과 확인":"문서 저장";
 }
 function countImages(text) {
   const marked=(text.match(/^\[사진\]\s*https?:\/\/[^\s|]+/gim)||[]).length;
@@ -598,7 +633,7 @@ function countVideos(text) {
 }
 function renderRecommendations() {
   const docs=liveDocs().filter(doc=>!doc.sample).slice().sort((a,b)=>recommendScore(b)-recommendScore(a));
-  return `<div class="content-page"><div class="page-title-row"><div><p class="eyebrow">Explore the wiki</p><h1 class="page-title">추천 문서</h1><p class="page-subtitle">직접 작성된 문서 중 많이 읽히고 최근에 업데이트된 문서를 모았어요.</p></div><button class="button button-primary" data-action="new-doc">${icons.plus}문서 만들기</button></div>${docs.length?`<div class="recommend-grid">${docs.map(d=>`<button class="panel recommend-card" data-action="open-doc" data-id="${esc(d.id)}"><span class="recommend-tag">${esc(d.category||"추천 문서")}</span><strong class="recommend-title">${esc(d.title)}</strong><span class="recommend-description">${esc(d.summary||d.body.slice(0,95))}</span><span class="recommend-bottom"><span>최근 수정 ${nowLabel(d.updatedAt||Date.now())}</span><span>조회 ${d.views||0}</span></span></button>`).join("")}</div>`:`<section class="panel empty-state"><p class="empty-title">아직 추천 문서가 없어요</p></section>`}</div>`;
+  return `<div class="content-page"><div class="page-title-row"><div><p class="eyebrow">Explore the wiki</p><h1 class="page-title">추천 문서</h1><p class="page-subtitle">직접 작성된 문서 중 많이 읽히고 최근에 업데이트된 문서를 모았어요.</p></div>${state.user?`<button class="button button-primary" data-action="new-doc">${icons.plus}문서 만들기</button>`:""}</div>${docs.length?`<div class="recommend-grid">${docs.map(d=>`<button class="panel recommend-card" data-action="open-doc" data-id="${esc(d.id)}"><span class="recommend-tag">${esc(d.category||"추천 문서")}</span><strong class="recommend-title">${esc(d.title)}</strong><span class="recommend-description">${esc(d.summary||d.body.slice(0,95))}</span><span class="recommend-bottom"><span>최근 수정 ${nowLabel(d.updatedAt||Date.now())}</span><span>조회 ${d.views||0}</span></span></button>`).join("")}</div>`:`<section class="panel empty-state"><p class="empty-title">아직 추천 문서가 없어요</p></section>`}</div>`;
 }
 function recommendScore(doc) { const days=Math.max(0,(Date.now()-(doc.updatedAt||Date.now()))/86400000);return (doc.views||0)*.25+Math.max(0,28-days)*.4; }
 function getTrendList() {
@@ -629,7 +664,7 @@ function renderRecentChanges() {
   const all=recentChangeItems(),items=state.changeFilter==="all"?all:all.filter(item=>item.kind===state.changeFilter);
   const emptyTitle=all.length?"이 종류의 변경 내역이 없어요":"아직 변경 내역이 없어요";
   const emptyCopy=all.length?"다른 변경 종류를 선택해 보세요.":"문서를 만들거나 편집하면 변경 내역이 여기에 표시됩니다.";
-  return `<div class="content-page"><div class="page-title-row"><div><p class="eyebrow">Wiki activity</p><h1 class="page-title">최근 변경내역</h1><p class="page-subtitle">새 문서와 편집, 숨김 처리 내역을 시간순으로 확인할 수 있어요.</p></div><button class="button button-primary" data-action="new-doc">${icons.plus}문서 만들기</button></div><nav class="recent-tabs" aria-label="변경 종류">${filters.map(([key,label])=>`<button class="${state.changeFilter===key?"active":""}" data-action="change-filter" data-filter="${key}">${label}</button>`).join("")}</nav><section class="change-table panel"><div class="change-head"><span>문서</span><span>기능</span><span>수정자</span><span>수정 시간</span></div>${items.length?items.slice(0,100).map(item=>`<div class="change-row"><div><button class="change-doc" data-action="open-doc" data-id="${esc(item.docId)}"><span>${esc(item.title||getDoc(item.docId)?.title||"제목 없는 문서")}</span></button><div class="change-tools"><button data-action="change-history" data-id="${esc(item.docId)}">역사</button><button data-action="compare-change" data-id="${esc(item.id)}">비교</button><button data-action="open-discussion-for-doc" data-id="${esc(item.docId)}">토론</button></div></div><span class="change-type">${names[item.kind]||"편집"}</span><span class="change-author">${esc(item.author||"이용자")}</span><time class="change-time">${nowLabel(changeTime(item))}</time></div>`).join(""):`<div class="empty-state"><p class="empty-title">${emptyTitle}</p><p class="empty-copy">${emptyCopy}</p></div>`}</section><p class="rank-disclaimer">${communityNotice("변경 내역")}</p></div>`;
+  return `<div class="content-page"><div class="page-title-row"><div><p class="eyebrow">Wiki activity</p><h1 class="page-title">최근 변경내역</h1><p class="page-subtitle">새 문서와 편집, 숨김 처리 내역을 시간순으로 확인할 수 있어요.</p></div>${state.user?`<button class="button button-primary" data-action="new-doc">${icons.plus}문서 만들기</button>`:""}</div><nav class="recent-tabs" aria-label="변경 종류">${filters.map(([key,label])=>`<button class="${state.changeFilter===key?"active":""}" data-action="change-filter" data-filter="${key}">${label}</button>`).join("")}</nav><section class="change-table panel"><div class="change-head"><span>문서</span><span>기능</span><span>수정자</span><span>수정 시간</span></div>${items.length?items.slice(0,100).map(item=>`<div class="change-row"><div><button class="change-doc" data-action="open-doc" data-id="${esc(item.docId)}"><span>${esc(item.title||getDoc(item.docId)?.title||"제목 없는 문서")}</span></button><div class="change-tools"><button data-action="change-history" data-id="${esc(item.docId)}">역사</button><button data-action="compare-change" data-id="${esc(item.id)}">비교</button><button data-action="open-discussion-for-doc" data-id="${esc(item.docId)}">토론</button></div></div><span class="change-type">${names[item.kind]||"편집"}</span><span class="change-author">${esc(item.author||"이용자")}</span><time class="change-time">${nowLabel(changeTime(item))}</time></div>`).join(""):`<div class="empty-state"><p class="empty-title">${emptyTitle}</p><p class="empty-copy">${emptyCopy}</p></div>`}</section><p class="rank-disclaimer">${communityNotice("변경 내역")}</p></div>`;
 }
 function isOld(item) { return Date.now()-changeTime(item)>7*86400000; }
 function discussionStatusLabel(item) { return item.status==="closed"?"닫힘":item.status==="paused"?"중지":"열림"; }
@@ -695,7 +730,7 @@ async function askAI(question) {
 function getAdminAccess() { return state.isAdmin||state.demoAdmin; }
 function canApproveEditRequests(){return getAdminAccess()||state.editorAccess?.canApproveEditRequests===true;}
 function canManageEditRestrictions(){return getAdminAccess()||state.editorAccess?.canManageRestrictions===true;}
-function canDeleteDocuments() { return state.isAdmin||(state.demoAdmin&&!state.firebase); }
+function canDeleteDocuments(doc=null) { return state.isAdmin||(state.demoAdmin&&!state.firebase)||Boolean(doc?.authorUid&&state.user?.uid===doc.authorUid); }
 function canOpenAdminWorkspace(){return getAdminAccess()||canApproveEditRequests();}
 async function toggleEditRestriction(id){
   const doc=state.docs.find(item=>item.id===id);if(!doc)return;
@@ -705,7 +740,7 @@ async function toggleEditRestriction(id){
   doc.editRestricted=restricted;doc.updatedAt=Date.now();saveLocal();logDocumentChange(doc,"edit");render();toast(restricted?"이 문서는 편집 제안 승인 후 반영돼요.":"이 문서는 저장하면 바로 반영돼요.");
 }
 async function submitEditProposal(doc,counts){
-  if(state.firebase&&!state.user){state.editingDraft={title:doc.title,category:doc.category,body:docEditorBody(doc)};toast("편집 제안을 제출하려면 로그인해 주세요.");showLoginModal();return;}
+  if(!state.user){state.editingDraft=null;toast("편집 제안을 제출하려면 로그인해 주세요.");showLoginModal();return;}
   const request={id:`edit-${Date.now()}-${Math.random().toString(36).slice(2,6)}`,docId:doc.id,title:doc.title,category:doc.category,summary:doc.summary,body:doc.body,images:doc.images||[],videos:doc.videos||[],author:state.user?.displayName||"이용자",ownerUid:state.user?.uid||null,status:"pending",chars:counts.chars,imageCount:counts.images,videoCount:counts.videos,createdAt:Date.now()};
   if(state.firebase){try{request.id=await cloudCreateEditRequest(request);}catch(error){console.error(error);toast("편집 제안을 제출하지 못했어요. Firestore 규칙과 로그인 상태를 확인해 주세요.");return;}}
   state.editRequests.unshift(request);saveLocal();state.editorId=null;state.editingDraft=null;state.docId=doc.id;navigate("article");
@@ -732,43 +767,82 @@ async function setEditorPermission(uid,granted){
 function requestDocumentDelete(id) {
   const doc=state.docs.find(item=>item.id===id);
   if(!doc)return;
-  if(!canDeleteDocuments()) { toast("문서 삭제는 관리자만 할 수 있어요.");return; }
-  modalOpen(`${modalHeader("문서를 영구 삭제할까요?",doc.title)}<p class="modal-copy">문서와 첨부 링크가 사이트에서 삭제됩니다. 삭제 기록은 최근 변경 내역에 남습니다.</p><div class="modal-note">삭제를 되돌릴 수 없어요. 공개만 중단하려면 관리자 센터에서 문서를 숨겨 주세요.</div><div class="modal-actions"><button class="button button-secondary" data-action="close-modal">취소</button><button class="button button-danger" data-action="confirm-delete-doc" data-id="${esc(doc.id)}">영구 삭제</button></div>`);
+  if(!canDeleteDocuments(doc)) { toast("문서 작성자 또는 관리자만 삭제할 수 있어요.");return; }
+  modalOpen(`${modalHeader("문서를 영구 삭제할까요?",doc.title)}<p class="modal-copy">문서와 첨부 링크가 사이트에서 삭제됩니다. 삭제 기록은 최근 변경 내역에 남습니다.</p><div class="modal-note">작성자는 본인 문서만 삭제할 수 있고 관리자는 모든 문서를 삭제할 수 있어요. 삭제를 되돌릴 수 없습니다.</div><div class="modal-actions"><button class="button button-secondary" data-action="close-modal">취소</button><button class="button button-danger" data-action="confirm-delete-doc" data-id="${esc(doc.id)}">영구 삭제</button></div>`);
 }
 async function deleteDocumentPermanently(id) {
   const doc=state.docs.find(item=>item.id===id);
   if(!doc)return;
-  if(!canDeleteDocuments()||(state.firebase&&!state.isAdmin)) { toast("문서 삭제는 관리자 계정으로만 할 수 있어요.");return; }
+  if(!canDeleteDocuments(doc)) { toast("문서 작성자 또는 관리자만 삭제할 수 있어요.");return; }
+  const returnToAdmin=state.view==="admin"&&getAdminAccess();
   if(state.firebase) {
     const {doc:docRef,deleteDoc:firestoreDeleteDoc}=state.firebase.dbSdk;
     try { await firestoreDeleteDoc(docRef(state.firebase.db,"docs",id)); }
-    catch(error) { console.error("Firebase 문서 삭제 실패:",error);toast("Firebase에서 문서를 삭제하지 못했어요. 관리자 권한과 Firestore 규칙을 확인해 주세요.");return; }
+    catch(error) { console.error("Firebase 문서 삭제 실패:",error);toast("문서를 삭제하지 못했어요. 본인 문서인지, Firestore 규칙이 업데이트됐는지 확인해 주세요.");return; }
   }
   logDocumentChange(doc,"delete",doc.body||"");
   state.docs=state.docs.filter(item=>item.id!==id);
   saveLocal();
   modalClose();
   state.docId=null;
-  navigate("home");
+  if(returnToAdmin)navigate("admin",{adminTab:"docs",docId:null});else navigate("home");
   toast("문서를 영구 삭제했어요.");
 }
 function renderAdmin() {
   if(!canOpenAdminWorkspace()){state.view="home";return renderHome();}
   const fullAccess=getAdminAccess();
-  const tabs=fullAccess?[["overview","개요"],["docs","문서 관리"],["requests","승인 요청"],["editRequests","편집 제안"],["permissions","편집 권한"],["reports","신고 검토"],["settings","작성 제한"]]:[["editRequests","편집 제안"]];
   const pendingLimits=state.requests.filter(r=>r.status==="pending").length;
   const pendingEdits=state.editRequests.filter(r=>r.status==="pending").length;
-  const pending=pendingLimits+pendingEdits;
+  const pendingReports=state.reports.filter(r=>r.status!=="reviewed").length;
+  const pending=pendingLimits+pendingEdits+pendingReports;
+  const tabs=fullAccess?[["overview","개요"],["docs","문서 관리"],["requests","승인 요청",pendingLimits],["editRequests","편집 제안",pendingEdits],["permissions","편집 권한"],["reports","신고 검토",pendingReports],["settings","작성 제한"]]:[["editRequests","편집 제안",pendingEdits]];
   let body="";
-  if(state.adminTab==="overview"&&fullAccess) body=`<div class="admin-stats"><div class="panel stat-card"><div class="stat-label">공개 문서</div><div class="stat-value">${liveDocs().length}</div><div class="stat-help">서현고위키에 공개됨</div></div><div class="panel stat-card"><div class="stat-label">승인 대기</div><div class="stat-value">${pending}</div><div class="stat-help">검토가 필요한 요청</div></div><div class="panel stat-card"><div class="stat-label">누적 조회</div><div class="stat-value">${state.docs.reduce((sum,d)=>sum+(d.views||0),0).toLocaleString()}</div><div class="stat-help">문서 조회수 합계</div></div><div class="panel stat-card"><div class="stat-label">검색어</div><div class="stat-value">${Object.keys(state.searches).length}</div><div class="stat-help">미리보기 집계 항목</div></div></div><div class="panel sidebar-panel"><h2 class="sidebar-title">관리자 작업</h2><div class="settings-grid"><button class="side-link" data-action="admin-tab" data-tab="editRequests">편집 제안 ${pendingEdits}건 확인 ${icons.arrow}</button><button class="side-link" data-action="admin-tab" data-tab="permissions">편집 권한 관리 ${icons.arrow}</button><button class="side-link" data-action="admin-tab" data-tab="docs">문서 목록 관리 ${icons.arrow}</button></div></div>`;
-  if(state.adminTab==="docs"&&fullAccess) body=`<div class="table-panel panel"><div class="table-row table-header"><span>문서</span><span>상태</span><span></span></div>${state.docs.map(d=>`<div class="table-row"><span class="table-title">${esc(d.title)}</span><span class="table-status ${d.status==="hidden"?"hidden":""}">${d.status==="hidden"?"숨김":"공개"}${d.editRestricted?" · 편집 제한":""}</span><span class="table-actions"><button data-action="open-doc" data-id="${esc(d.id)}">보기</button><button data-action="edit-doc" data-id="${esc(d.id)}">편집</button><button data-action="toggle-doc" data-id="${esc(d.id)}">${d.status==="hidden"?"공개":"숨김"}</button></span></div>`).join("")}</div>`;
-  if(state.adminTab==="requests"&&fullAccess) body=`<div class="panel">${state.requests.length?state.requests.map(r=>`<div class="request-row"><div class="request-copy"><div class="request-title">${esc(r.title||"제목 없는 문서")}</div><div class="request-detail">${esc(r.reason||"작성 제한 초과 승인 요청")}<br>요청: ${esc(r.author||"이용자")} · 글자 ${Number(r.chars||0).toLocaleString()} / 사진 ${r.images||0} / 동영상 ${r.videos||0} · ${r.status==="pending"?"승인 대기":r.status==="approved"?"승인됨":"거절됨"}</div></div><div class="request-actions">${r.status==="pending"?`<button class="button button-primary" data-action="approve-request" data-id="${esc(r.id)}">승인</button><button class="button button-secondary" data-action="reject-request" data-id="${esc(r.id)}">거절</button>`:`<button class="button button-secondary" data-action="view-request" data-id="${esc(r.id)}">요청 보기</button>`}</div></div>`).join(""):`<div class="empty-state"><div class="empty-mark">${icons.shield}</div><p class="empty-title">대기 중인 승인 요청이 없어요</p><p class="empty-copy">작성 제한을 넘는 편집 요청이 이곳에 표시됩니다.</p></div>`}</div>`;
-  if(state.adminTab==="editRequests") body=`<div class="panel">${pendingEdits?state.editRequests.filter(r=>r.status==="pending").map(r=>`<article class="request-row"><div class="request-copy"><div class="request-title">${esc(r.title||"제목 없는 문서")}</div><div class="request-detail">대상 문서: ${esc(state.docs.find(d=>d.id===r.docId)?.title||r.docId)}<br>요청자: ${esc(r.author||"이용자")} · ${nowLabel(r.createdAt?.toMillis?.()||r.createdAt||Date.now())}<br>글자 ${Number(r.chars||0).toLocaleString()} / 사진 ${r.imageCount||0} / 동영상 ${r.videoCount||0}</div><details class="proposal-preview"><summary>제안 내용 보기</summary><div class="article-body">${markdownHtml(r.body||"")}</div></details></div><div class="request-actions"><button class="button button-primary" data-action="approve-edit-proposal" data-id="${esc(r.id)}">승인하고 반영</button><button class="button button-secondary" data-action="reject-edit-proposal" data-id="${esc(r.id)}">거절</button></div></article>`).join(""):`<div class="empty-state"><div class="empty-mark">${icons.doc}</div><p class="empty-title">검토할 편집 제안이 없어요</p><p class="empty-copy">제한된 문서의 수정 제안이 여기에 표시됩니다.</p></div>`}</div>`;
-  if(state.adminTab==="permissions"&&fullAccess) body=`<div class="panel"><p class="modal-copy">권한은 관리자가 부여하거나 회수할 수 있어요. 학교 계정은 한 번 로그인한 뒤 목록에 나타납니다.</p>${state.userProfiles.filter(profile=>profile.email?.toLowerCase()!==ADMIN_EMAIL).length?state.userProfiles.filter(profile=>profile.email?.toLowerCase()!==ADMIN_EMAIL).map(profile=>{const granted=state.editorPermissions[profile.id]?.canApproveEditRequests===true;return `<div class="request-row"><div class="request-copy"><div class="request-title">${esc(profile.displayName||"이름 없음")}</div><div class="request-detail">${esc(profile.email||profile.id)} · ${granted?"편집 권한 있음":"일반 이용자"}</div></div><div class="request-actions"><button class="button ${granted?"button-secondary":"button-primary"}" data-action="set-editor-permission" data-uid="${esc(profile.id)}" data-granted="${granted?"false":"true"}">${granted?"권한 회수":"권한 부여"}</button></div></div>`;}).join(""):`<div class="empty-state"><p class="empty-title">아직 로그인한 학교 계정이 없어요</p><p class="empty-copy">사용자가 Google 로그인하면 여기에서 편집 권한을 줄 수 있어요.</p></div>`}</div>`;
-  if(state.adminTab==="reports"&&fullAccess) body=`<div class="panel">${state.reports.length?state.reports.map(r=>`<div class="request-row"><div class="request-copy"><div class="request-title">${esc(getDoc(r.docId)?.title||"삭제되었거나 숨긴 문서")}</div><div class="request-detail">${esc(r.reason||"신고 사유 없음")}<br>접수 ${nowLabel(r.createdAt?.toMillis?.()||r.createdAt||Date.now())} · ${r.status==="reviewed"?"검토 완료":"검토 대기"}</div></div><div class="request-actions">${r.status!=="reviewed"?`<button class="button button-primary" data-action="review-report" data-id="${esc(r.id)}">검토 완료</button>`:""}<button class="button button-secondary" data-action="open-doc" data-id="${esc(r.docId)}">문서 보기</button></div></div>`).join(""):`<div class="empty-state"><div class="empty-mark">${icons.shield}</div><p class="empty-title">접수된 신고가 없어요</p><p class="empty-copy">문서 신고가 접수되면 여기서 검토할 수 있습니다.</p></div>`}</div>`;
-  if(state.adminTab==="settings"&&fullAccess) body=`<div class="settings-grid"><section class="panel settings-card"><h3>문서 작성 제한</h3><label class="setting-inline"><span>문서 최대 글자 수</span><input type="number" min="500" max="50000" step="500" data-setting="chars" value="${state.config.chars}"></label><label class="setting-inline"><span>사진 링크 최대 수</span><input type="number" min="0" max="20" data-setting="images" value="${state.config.images}"></label><label class="setting-inline"><span>동영상 링크 최대 수</span><input type="number" min="0" max="10" data-setting="videos" value="${state.config.videos}"></label><button class="button button-primary" style="margin-top:14px" data-action="save-limits">제한 저장</button></section><section class="panel settings-card"><h3>위키 운영 설정</h3><p class="field-hint">일반 문서는 저장 즉시 반영됩니다. 편집 제한을 설정한 문서는 제안 승인 후 반영돼요.</p></section></div>`;
+  if(state.adminTab==="overview"&&fullAccess){
+    const tasks=[
+      {tab:"editRequests",title:"편집 제안",count:pendingEdits,copy:pendingEdits?"수정 내용을 살펴보고 반영 여부를 정해 주세요.":"검토할 제안이 없습니다."},
+      {tab:"requests",title:"작성 승인 요청",count:pendingLimits,copy:pendingLimits?"새 문서와 작성 제한 초과 요청을 확인해 주세요.":"대기 중인 작성 요청이 없습니다."},
+      {tab:"reports",title:"신고",count:pendingReports,copy:pendingReports?"신고된 문서와 사유를 확인해 주세요.":"새로 접수된 신고가 없습니다."}
+    ];
+    const stats=[
+      ["공개 문서",liveDocs().length,"docs","문서 목록"],
+      ["숨김 문서",state.docs.filter(d=>!d.sample&&d.status==="hidden").length,"docs","문서 목록"],
+      ["검토 대기",pending,"editRequests","검토 목록"],
+      ["이용자",state.userProfiles.length,"permissions","권한 관리"]
+    ];
+    body=`<section class="panel admin-work-panel"><div class="admin-section-heading"><div><h2>검토할 항목</h2><p>확인할 항목을 선택하면 해당 목록으로 이동합니다.</p></div><span class="admin-pending-total">대기 ${pending}건</span></div><div class="admin-work-list">${tasks.map(task=>`<button type="button" class="admin-work-row" data-action="admin-tab" data-tab="${task.tab}"><span class="admin-work-count ${task.count?"needs-review":""}">${task.count||"–"}</span><span class="admin-work-copy"><strong>${task.title}</strong><small>${task.copy}</small></span><span class="admin-work-arrow" aria-hidden="true">›</span></button>`).join("")}</div></section><section class="admin-metrics" aria-label="위키 현황">${stats.map(([label,value,tab,action])=>`<button type="button" class="admin-metric" data-action="admin-tab" data-tab="${tab}"><span>${label}</span><strong>${Number(value).toLocaleString()}</strong><small>${action}</small></button>`).join("")}</section>`;
+  }
+  if(state.adminTab==="docs"&&fullAccess){
+    const managedDocs=state.docs.filter(d=>!d.sample);
+    const rows=managedDocs.map(d=>{
+      const status=d.status==="hidden"?"hidden":"published";
+      const searchable=`${d.title||""} ${d.category||""} ${d.author||""}`.toLocaleLowerCase();
+      return `<article class="admin-doc-row" data-admin-doc-row data-status="${status}" data-restricted="${d.editRestricted?"true":"false"}" data-search="${esc(searchable)}"><div class="admin-doc-info"><button class="admin-doc-title" data-action="open-doc" data-id="${esc(d.id)}">${esc(d.title||"제목 없는 문서")}</button><span class="admin-doc-meta">${esc(d.category||"미분류")} · ${esc(d.author||"작성자 정보 없음")}</span></div><span class="admin-doc-status ${status}">${status==="hidden"?"숨김":"공개"}${d.editRestricted?" · 편집 제한":""}</span><div class="admin-doc-actions"><button data-action="edit-doc" data-id="${esc(d.id)}">편집</button><button data-action="toggle-doc" data-id="${esc(d.id)}">${status==="hidden"?"공개":"숨김"}</button><button class="admin-delete-action" data-action="delete-doc" data-id="${esc(d.id)}">삭제</button></div></article>`;
+    }).join("");
+    body=`<section class="panel admin-doc-panel"><div class="admin-doc-toolbar"><label class="admin-doc-search">${icons.search}<input id="adminDocSearch" type="search" placeholder="문서명, 분류, 작성자 검색" aria-label="문서 검색"></label><label class="admin-doc-filter"><span class="sr-only">문서 상태 필터</span><select id="adminDocFilter"><option value="all">모든 문서</option><option value="published">공개 문서</option><option value="hidden">숨김 문서</option><option value="restricted">편집 제한 문서</option></select></label><span id="adminDocCount" class="admin-doc-count">${managedDocs.length}개 문서</span></div><div class="admin-doc-list">${rows||`<div class="empty-state admin-list-empty"><p class="empty-title">등록된 문서가 없어요</p><p class="empty-copy">새 문서를 작성하면 이곳에서 관리할 수 있습니다.</p></div>`}<div id="adminDocsNoResults" class="admin-doc-no-results" hidden>조건에 맞는 문서가 없습니다. 검색어나 필터를 바꿔 보세요.</div></div></section>`;
+  }
+  if(state.adminTab==="requests"&&fullAccess) body=`<section class="panel admin-list-panel">${state.requests.length?state.requests.map(r=>`<article class="request-row"><div class="request-copy"><div class="request-title">${esc(r.title||"제목 없는 문서")}</div><div class="request-detail">${esc(r.reason||"새 문서 공개 승인 요청")}<br>요청: ${esc(r.author||"이용자")} · 글자 ${Number(r.chars||0).toLocaleString()} / 사진 ${r.images||r.mediaImages?.length||0} / 동영상 ${r.videos||r.mediaVideos?.length||0} · ${r.status==="pending"?"승인 대기":r.status==="approved"?"승인됨":"거절됨"}</div></div><div class="request-actions">${r.status==="pending"?`<button class="button button-primary" data-action="approve-request" data-id="${esc(r.id)}">승인</button><button class="button button-secondary" data-action="reject-request" data-id="${esc(r.id)}">거절</button>`:`<button class="button button-secondary" data-action="view-request" data-id="${esc(r.id)}">요청 보기</button>`}</div></article>`).join(""):`<div class="empty-state"><div class="empty-mark">${icons.shield}</div><p class="empty-title">대기 중인 승인 요청이 없어요</p><p class="empty-copy">새 문서와 작성 제한 초과 요청이 이곳에 표시됩니다.</p></div>`}</section>`;
+  if(state.adminTab==="editRequests") body=`<section class="panel admin-list-panel">${pendingEdits?state.editRequests.filter(r=>r.status==="pending").map(r=>`<article class="request-row"><div class="request-copy"><div class="request-title">${esc(r.title||"제목 없는 문서")}</div><div class="request-detail">대상 문서: ${esc(state.docs.find(d=>d.id===r.docId)?.title||r.docId)}<br>요청자: ${esc(r.author||"이용자")} · ${nowLabel(r.createdAt?.toMillis?.()||r.createdAt||Date.now())}<br>글자 ${Number(r.chars||0).toLocaleString()} / 사진 ${r.imageCount||0} / 동영상 ${r.videoCount||0}</div><details class="proposal-preview"><summary>제안 내용 보기</summary><div class="article-body">${markdownHtml(r.body||"")}</div></details></div><div class="request-actions"><button class="button button-primary" data-action="approve-edit-proposal" data-id="${esc(r.id)}">승인하고 반영</button><button class="button button-secondary" data-action="reject-edit-proposal" data-id="${esc(r.id)}">거절</button></div></article>`).join(""):`<div class="empty-state"><div class="empty-mark">${icons.doc}</div><p class="empty-title">검토할 편집 제안이 없어요</p><p class="empty-copy">제한된 문서의 수정 제안이 여기에 표시됩니다.</p></div>`}</section>`;
+  if(state.adminTab==="permissions"&&fullAccess) body=`<section class="panel admin-list-panel"><div class="admin-list-intro"><strong>편집 권한을 관리해요</strong><p>권한을 받은 이용자는 제한 문서의 편집 제안을 검토할 수 있습니다. 권한은 언제든 회수할 수 있어요.</p></div>${state.userProfiles.filter(profile=>profile.email?.toLowerCase()!==ADMIN_EMAIL).length?state.userProfiles.filter(profile=>profile.email?.toLowerCase()!==ADMIN_EMAIL).map(profile=>{const granted=state.editorPermissions[profile.id]?.canApproveEditRequests===true;return `<article class="request-row"><div class="request-copy"><div class="request-title">${esc(profile.displayName||"이름 없음")}</div><div class="request-detail">${esc(profile.email||profile.id)} · ${granted?"편집 제안 검토 가능":"일반 이용자"}</div></div><div class="request-actions"><button class="button ${granted?"button-secondary":"button-primary"}" data-action="set-editor-permission" data-uid="${esc(profile.id)}" data-granted="${granted?"false":"true"}">${granted?"권한 회수":"권한 부여"}</button></div></article>`;}).join(""):`<div class="empty-state"><p class="empty-title">아직 로그인한 학교 계정이 없어요</p><p class="empty-copy">학교 계정으로 로그인한 이용자가 이 목록에 표시됩니다.</p></div>`}</section>`;
+  if(state.adminTab==="reports"&&fullAccess) body=`<section class="panel admin-list-panel">${state.reports.length?state.reports.map(r=>`<article class="request-row"><div class="request-copy"><div class="request-title">${esc(getDoc(r.docId)?.title||"삭제되었거나 숨긴 문서")}</div><div class="request-detail">${esc(r.reason||"신고 사유 없음")}<br>접수 ${nowLabel(r.createdAt?.toMillis?.()||r.createdAt||Date.now())} · ${r.status==="reviewed"?"검토 완료":"검토 대기"}</div></div><div class="request-actions">${r.status!=="reviewed"?`<button class="button button-primary" data-action="review-report" data-id="${esc(r.id)}">검토 완료</button>`:""}<button class="button button-secondary" data-action="open-doc" data-id="${esc(r.docId)}">문서 보기</button></div></article>`).join(""):`<div class="empty-state"><div class="empty-mark">${icons.shield}</div><p class="empty-title">접수된 신고가 없어요</p><p class="empty-copy">문서 신고가 접수되면 여기서 검토할 수 있습니다.</p></div>`}</section>`;
+  if(state.adminTab==="settings"&&fullAccess) body=`<div class="settings-grid"><section class="panel settings-card"><h3>문서 작성 제한</h3><p class="admin-settings-help">저장 공간과 검토 부담을 고려해 문서별 최대 작성량을 정합니다.</p><label class="setting-inline"><span>문서 최대 글자 수</span><input type="number" min="500" max="50000" step="500" data-setting="chars" value="${state.config.chars}"></label><label class="setting-inline"><span>사진 링크 최대 수</span><input type="number" min="0" max="20" data-setting="images" value="${state.config.images}"></label><label class="setting-inline"><span>동영상 링크 최대 수</span><input type="number" min="0" max="10" data-setting="videos" value="${state.config.videos}"></label><button class="button button-primary" style="margin-top:14px" data-action="save-limits">제한 저장</button><p class="admin-settings-note">제한을 변경하면 Firestore 보안 규칙도 같은 기준으로 맞춰야 합니다.</p></section><section class="panel settings-card"><h3>편집과 승인 안내</h3><p class="admin-settings-help">새 문서는 관리자 승인 후 공개됩니다. 일반 문서는 작성자와 관계없이 학교 계정 누구나 편집해 즉시 저장할 수 있고, 편집 제한 문서와 작성량 초과 편집은 승인 후 반영됩니다.</p></section></div>`;
   const title=fullAccess?"관리자 센터":"편집 제안 검토";
-  return `<div class="content-page"><div class="page-title-row"><div><p class="eyebrow">${fullAccess?"Admin workspace":"Editor workspace"}</p><h1 class="page-title">${title}</h1><p class="page-subtitle">${fullAccess?"문서, 편집 권한, 승인 요청을 관리합니다.":"권한 있는 이용자만 편집 제안을 검토할 수 있어요."}${state.demoAdmin?" · 로컬 미리보기":""}</p></div><button class="button button-secondary" data-action="admin-exit">나가기</button></div><nav class="admin-tabs">${tabs.map(([id,label])=>`<button class="${state.adminTab===id?"active":""}" data-action="admin-tab" data-tab="${id}">${label}${id==="editRequests"&&pendingEdits?` · ${pendingEdits}`:""}</button>`).join("")}</nav>${body}</div>`;
+  return `<div class="content-page admin-page"><div class="page-title-row"><div class="admin-title-copy"><p class="eyebrow">${fullAccess?"Admin workspace":"Editor workspace"}</p><h1 class="page-title">${title}</h1><p class="page-subtitle">${fullAccess?"문서와 이용자, 검토 요청을 한곳에서 관리합니다.":"권한 있는 이용자만 편집 제안을 검토할 수 있어요."}${state.demoAdmin?" · 로컬 미리보기":""}</p><button class="button button-secondary admin-return-button" data-action="admin-exit">사이트로 돌아가기</button></div></div><nav class="admin-tabs" aria-label="관리자 메뉴">${tabs.map(([id,label,count])=>`<button class="${state.adminTab===id?"active":""}" data-action="admin-tab" data-tab="${id}">${label}${count?`<span class="admin-tab-count">${count}</span>`:""}</button>`).join("")}</nav>${body}</div>`;
+}
+function filterAdminDocRows() {
+  const rows=[...document.querySelectorAll("[data-admin-doc-row]")];
+  const query=String(document.querySelector("#adminDocSearch")?.value||"").trim().toLocaleLowerCase();
+  const filter=document.querySelector("#adminDocFilter")?.value||"all";
+  let visible=0;
+  rows.forEach(row=>{
+    const statusMatches=filter==="all"||(filter==="restricted"?row.dataset.restricted==="true":row.dataset.status===filter);
+    const queryMatches=!query||row.dataset.search.includes(query);
+    row.hidden=!(statusMatches&&queryMatches);
+    if(!row.hidden)visible++;
+  });
+  const count=document.querySelector("#adminDocCount");
+  if(count)count.textContent=query||filter!=="all"?`${visible} / ${rows.length}개 문서`:`${rows.length}개 문서`;
+  const empty=document.querySelector("#adminDocsNoResults");
+  if(empty)empty.hidden=visible>0||rows.length===0;
 }
 
 function logDocumentChange(doc,kind,previousBody="") {
@@ -829,22 +903,24 @@ async function syncSearchesFromCloud() {
   saveLocal();
 }
 function startEdit(id=null,title="") {
+  if(!state.user){toast("문서를 작성하거나 편집하려면 먼저 로그인해 주세요.");showLoginModal();return false;}
   const doc=id?state.docs.find(d=>d.id===id):null;
-  state.pendingChangeKind=null;state.editorId=id;state.editingDraft=doc?{title:doc.title,category:doc.category,body:docEditorBody(doc)}:title?{title,category:"",body:""}:null;navigate("editor");
+  state.pendingChangeKind=null;state.editorId=id;state.editingDraft=doc?{title:doc.title,category:doc.category,body:docEditorBody(doc)}:title?{title,category:"",body:""}:null;navigate("editor");return true;
 }
 async function saveEditor(form) {
   const fd=new FormData(form),title=String(fd.get("title")||"").trim(),category=String(fd.get("category")||""),body=String(fd.get("body")||"").trim();
   if(!title||!body){toast("제목과 본문을 작성해 주세요.");return;}
   const existing=state.editorId?state.docs.find(d=>d.id===state.editorId):null;
   if(!WIKI_CATEGORIES.includes(category)&&category!==existing?.category){toast("문서 분류를 선택해 주세요.");document.querySelector("#docCategory")?.focus();return;}
-  if(state.firebase&&!state.user){state.editingDraft={title,category,body};toast("문서를 저장하려면 먼저 로그인해 주세요.");showLoginModal();return;}
+  if(!state.user){state.editingDraft=null;toast("문서를 저장하려면 먼저 로그인해 주세요.");showLoginModal();return;}
   const images=countImages(body),videos=countVideos(body),chars=body.length;
   const exceeded=chars>state.config.chars||images>state.config.images||videos>state.config.videos;
   const media=extractMedia(body),cleanBody=stripMedia(body);
   const doc={id:existing?.id||slugify(title),title,category,summary:cleanBody.replace(/^#+.*$/gm,"").trim().slice(0,160),body:cleanBody,images:media.images,videos:media.videos,views:existing?.views||0,updatedAt:Date.now(),author:existing?.author||state.user?.displayName||"이용자",authorUid:existing?.authorUid||state.user?.uid||null,editRestricted:Boolean(existing?.editRestricted),status:existing?.status||"published",sample:false};
   const duplicate=state.docs.some(d=>d.id===doc.id&&d.id!==state.editorId);
   if(duplicate){doc.id=`${doc.id}-${Math.random().toString(36).slice(2,6)}`;}
-  if(exceeded&&!getAdminAccess()) { requestLimitApproval(doc,{chars,images,videos});return; }
+  if(!existing) { await requestLimitApproval(doc,{chars,images,videos},"새 문서 공개 승인 요청");return; }
+  if(exceeded&&!getAdminAccess()) { await requestLimitApproval(doc,{chars,images,videos},"작성 제한 초과 편집 승인 요청");return; }
   if(existing?.editRestricted&&!state.isAdmin){await submitEditProposal(doc,{chars,images,videos});return;}
   if(exceeded&&getAdminAccess()) { modalOpen(`${modalHeader("제한 초과 문서 저장", "관리자도 확인 후 승인 절차를 거쳐 저장합니다.")}<p class="modal-copy">설정한 제한을 넘는 내용입니다. 관리자 권한으로 예외 승인을 기록하고 저장할까요?</p><div class="modal-actions"><button class="button button-secondary" data-action="close-modal">취소</button><button class="button button-primary" data-action="admin-save-overlimit" data-doc='${esc(JSON.stringify(doc))}'>예외 승인 후 저장</button></div>`);return; }
   await persistDoc(doc);
@@ -874,22 +950,36 @@ async function persistDoc(doc) {
   saveLocal();state.editorId=null;state.editingDraft=null;state.docId=doc.id;navigate("article");toast("문서를 저장했어요.");
   return true;
 }
-function requestLimitApproval(doc,counts) {
-  const request={id:`request-${Date.now()}`,title:doc.title,category:doc.category,body:doc.body,mediaImages:doc.images||[],mediaVideos:doc.videos||[],summary:doc.summary,reason:"작성 제한을 초과한 편집 승인 요청",chars:counts.chars,images:counts.images,videos:counts.videos,author:doc.author||state.user?.displayName||"미리보기 이용자",authorUid:doc.authorUid||state.user?.uid||null,editRestricted:Boolean(doc.editRestricted),uid:state.user?.uid||null,status:"pending",createdAt:Date.now(),docId:doc.id};
-  state.requests.unshift(request);saveLocal();if(state.firebase)cloudRequest(request).catch(err=>{console.error(err);toast("승인 요청을 Firebase에 저장하지 못했어요.");});
+async function requestLimitApproval(doc,counts,reason="작성 제한 초과 편집 승인 요청") {
+  const request={id:`request-${Date.now()}`,title:doc.title,category:doc.category,body:doc.body,mediaImages:doc.images||[],mediaVideos:doc.videos||[],summary:doc.summary,reason,chars:counts.chars,images:counts.images,videos:counts.videos,author:doc.author||state.user?.displayName||"미리보기 이용자",authorUid:doc.authorUid||state.user?.uid||null,editRestricted:Boolean(doc.editRestricted),uid:state.user?.uid||null,status:"pending",createdAt:Date.now(),docId:doc.id};
+  if(state.firebase){
+    try{await cloudRequest(request);}
+    catch(error){console.error("Firebase 승인 요청 저장 실패:",error);toast("승인 요청 저장에 실패했어요. 요청은 관리자에게 전달되지 않았습니다. 로그인과 Firestore 규칙을 확인해 주세요.");return false;}
+  }
+  state.requests.unshift(request);saveLocal();
   navigate("home");
-  modalOpen(`${modalHeader("관리자에게 승인 요청을 보냈어요", "작성 제한을 넘는 내용은 확인 후 공개됩니다.")}<p class="modal-copy"><strong>${esc(doc.title)}</strong> 문서 편집을 승인 대기 목록에 추가했습니다. 관리자 검토가 끝나면 문서가 공개돼요.</p><div class="modal-note">글자 ${counts.chars.toLocaleString()}자 · 사진 ${counts.images}개 · 동영상 ${counts.videos}개</div><div class="modal-actions"><button class="button button-primary" data-action="close-modal">확인</button></div>`);
+  const localOnly=!state.firebase;
+  const title=localOnly?"이 브라우저에 요청을 저장했어요":"관리자 승인 요청을 접수했어요";
+  const detail=localOnly?"현재 Firebase 연결이 없어 이 요청은 이 브라우저에만 저장됐어요. 관리자에게 실제로 전달되지는 않았습니다.":reason.startsWith("새 문서")?"관리자가 승인하면 문서가 공개됩니다.":"관리자가 확인한 뒤 편집 내용이 반영됩니다.";
+  modalOpen(`${modalHeader(title, detail)}<p class="modal-copy"><strong>${esc(doc.title)}</strong> ${localOnly?"미리보기 승인 목록에 저장했습니다.":"승인 대기 목록에 추가했습니다."}</p><div class="modal-note">글자 ${counts.chars.toLocaleString()}자 · 사진 ${counts.images}개 · 동영상 ${counts.videos}개${localOnly?" · 로컬 전용": ""}</div><div class="modal-actions"><button class="button button-primary" data-action="close-modal">확인</button></div>`);
+  return true;
 }
 async function approveRequest(id) {
+  if(!getAdminAccess()){toast("승인 권한이 있는 관리자만 처리할 수 있어요.");return;}
   const req=state.requests.find(r=>r.id===id);if(!req)return;
+  if(!req.body){toast("요청 내용이 없어 승인할 수 없어요.");return;}
+  const docId=req.docId||slugify(req.title),index=state.docs.findIndex(item=>item.id===docId),existing=index>=0?state.docs[index]:null;
+  const doc={id:docId,title:req.title,category:req.category,summary:req.summary||req.body.slice(0,160),body:req.body,images:req.mediaImages||[],videos:req.mediaVideos||[],views:existing?.views||0,updatedAt:Date.now(),author:req.author||existing?.author||"이용자",authorUid:req.authorUid||existing?.authorUid||null,editRestricted:Boolean(req.editRestricted||existing?.editRestricted),status:existing?.status||"published",sample:false};
+  if(state.firebase){try{await cloudReviewLimitRequest(req,doc,true);}catch(error){console.error("승인 문서 저장 실패:",error);toast("승인 저장에 실패했어요. 문서는 아직 공개되지 않았습니다. Firestore 규칙과 관리자 로그인을 확인해 주세요.");return;}}
   req.status="approved";
-  if(req.body){const id=req.docId||slugify(req.title),index=state.docs.findIndex(item=>item.id===id),existing=index>=0?state.docs[index]:null;const doc={id,title:req.title,category:req.category,summary:req.summary||req.body.slice(0,160),body:req.body,images:req.mediaImages||[],videos:req.mediaVideos||[],views:existing?.views||0,updatedAt:Date.now(),author:req.author||existing?.author||"이용자",authorUid:req.authorUid||existing?.authorUid||null,editRestricted:Boolean(req.editRestricted||existing?.editRestricted),status:existing?.status||"published",sample:false};logDocumentChange(doc,existing?"edit":"new",existing?.body||"");if(existing)state.docs[index]=doc;else state.docs.unshift(doc);if(state.firebase)await cloudWriteDoc(doc).catch(console.error);}
-  if(state.firebase){const {doc:docRef,updateDoc,serverTimestamp}=state.firebase.dbSdk;await updateDoc(docRef(state.firebase.db,"limitRequests",id),{status:"approved",reviewedAt:serverTimestamp(),reviewedBy:state.user?.uid||"demo-admin"}).catch(console.error);}
+  logDocumentChange(doc,existing?"edit":"new",existing?.body||"");if(existing)state.docs[index]=doc;else state.docs.unshift(doc);
   saveLocal();render();toast("요청을 승인하고 문서를 공개했어요.");
 }
 async function rejectRequest(id) {
-  const req=state.requests.find(r=>r.id===id);if(!req)return;req.status="rejected";
-  if(state.firebase){const {doc:docRef,updateDoc,serverTimestamp}=state.firebase.dbSdk;await updateDoc(docRef(state.firebase.db,"limitRequests",id),{status:"rejected",reviewedAt:serverTimestamp(),reviewedBy:state.user?.uid||"demo-admin"}).catch(console.error);}
+  if(!getAdminAccess()){toast("승인 권한이 있는 관리자만 처리할 수 있어요.");return;}
+  const req=state.requests.find(r=>r.id===id);if(!req)return;
+  if(state.firebase){try{await cloudReviewLimitRequest(req,null,false);}catch(error){console.error("승인 요청 거절 실패:",error);toast("거절 상태를 Firebase에 저장하지 못했어요.");return;}}
+  req.status="rejected";
   saveLocal();render();toast("승인 요청을 거절했어요.");
 }
 async function submitReport(docId) {
@@ -908,9 +998,9 @@ async function reviewReport(id) {
 function showLoginModal() {
   if(state.user||state.demoAdmin){
     const workspaceButton=canOpenAdminWorkspace()?`<button class="button button-secondary" style="width:100%;margin:0 0 12px" data-action="open-admin">${getAdminAccess()?"관리자 센터 열기":"편집 제안 검토"}</button>`:"";
-    modalOpen(`${modalHeader("내 계정", "서현고위키 계정 정보를 확인합니다.")}<div class="auth-user"><span class="avatar">${esc(state.user?.displayName?.slice(0,1)||"관")}</span><div><strong>${esc(state.user?.displayName||"관리자 미리보기")}</strong><small>${esc(state.user?.email||"로컬 데모 계정")}</small></div></div><button class="button button-primary" style="width:100%;margin:0 0 12px" data-action="new-doc">문서 작성</button>${workspaceButton}<div class="modal-actions"><button class="button button-secondary" data-action="sign-out">로그아웃</button><button class="button button-secondary" data-action="close-modal">닫기</button></div>`);return;
+    modalOpen(`${modalHeader("내 계정", "서현고위키 계정 정보를 확인합니다.")}<div class="auth-user"><span class="avatar">${esc(state.user?.displayName?.slice(0,1)||"관")}</span><div><strong>${esc(state.user?.displayName||"관리자 미리보기")}</strong><small>${esc(state.user?.email||"로컬 데모 계정")}</small></div></div>${state.user?`<button class="button button-primary" style="width:100%;margin:0 0 12px" data-action="new-doc">문서 작성</button>`:""}${workspaceButton}<div class="modal-actions"><button class="button button-secondary" data-action="sign-out">로그아웃</button><button class="button button-secondary" data-action="close-modal">닫기</button></div>`);return;
   }
-  modalOpen(`${modalHeader("서현고위키 로그인", "학교 Google 계정의 학번과 이름을 입력해 주세요.")}<div class="auth-options">${isFirebaseConfigured?`<form id="loginProfileForm" class="login-profile-form"><div class="field"><label for="loginStudentNumber">학번</label><input id="loginStudentNumber" name="studentNumber" inputmode="numeric" autocomplete="off" maxlength="5" pattern="[0-9]{5}" placeholder="학교 이메일의 숫자 5자리"></div><div class="field"><label for="loginStudentName">이름</label><input id="loginStudentName" name="studentName" autocomplete="name" maxlength="24" pattern="[가-힣]+" placeholder="한글 이름만 입력해 주세요"></div><div class="profile-visibility-note">학교 계정은 <strong>25-학번@seohyun.hs.kr</strong> 형식이어야 하며, 입력한 학번이 계정과 일치해야 합니다. 학번과 이름은 작성자 닉네임으로 표시됩니다.</div><label class="check-row profile-consent"><input type="checkbox" name="publicProfileConsent"><span>학번과 이름이 작성자 닉네임으로 공개되는 것을 확인했습니다.</span></label><button class="auth-google-button" type="submit"><span class="auth-google-mark" aria-hidden="true">G</span><span>Google 계정으로 로그인</span></button></form>`:`<div class="modal-note auth-config-note">지금은 로컬 미리보기입니다. Firebase 설정 후 Google 로그인이 활성화됩니다.</div>`}<div class="auth-divider"><span>또는</span></div><button class="auth-write-card" type="button" data-action="new-doc"><span class="auth-write-icon" aria-hidden="true">${icons.doc}</span><span class="auth-write-copy"><strong>문서 작성하기</strong><small>${isFirebaseConfigured?"초안을 작성하고 저장할 때 로그인할 수 있어요.":"로컬 미리보기에서 문서를 작성할 수 있어요."}</small></span><span class="auth-write-arrow" aria-hidden="true">${icons.arrow}</span></button></div>`);
+  modalOpen(`${modalHeader("서현고위키 로그인", "학교 Google 계정의 학번과 이름을 입력해 주세요.")}<div class="auth-options">${isFirebaseConfigured?`<form id="loginProfileForm" class="login-profile-form"><div class="field"><label for="loginStudentNumber">학번</label><input id="loginStudentNumber" name="studentNumber" inputmode="numeric" autocomplete="off" maxlength="5" pattern="[0-9]{5}" placeholder="숫자 5자리"></div><div class="field"><label for="loginStudentName">이름</label><input id="loginStudentName" name="studentName" autocomplete="name" maxlength="24" pattern="[가-힣]+" placeholder="한글 이름만 입력해 주세요"></div><div class="profile-visibility-note">서현고 학교 계정(<strong>25-숫자@seohyun.hs.kr</strong>)으로 로그인해 주세요. 여기에 입력한 학번은 계정 이메일의 숫자와 달라도 됩니다. 학번과 이름은 작성자 닉네임으로 표시됩니다. 관리자 계정은 두 항목을 비워도 로그인할 수 있어요.</div><label class="check-row profile-consent"><input type="checkbox" name="publicProfileConsent"><span>학번과 이름이 작성자 닉네임으로 공개되는 것을 확인했습니다.</span></label><button class="auth-google-button" type="submit"><span class="auth-google-mark" aria-hidden="true">G</span><span>Google 계정으로 로그인</span></button></form>`:`<div class="modal-note auth-config-note">지금은 로컬 미리보기입니다. Firebase 설정 후 Google 로그인이 활성화됩니다.</div>`}</div>`);
 }
 function normalizeProfileText(value="") {
   return String(value).normalize("NFKC").toLocaleLowerCase("ko-KR").replace(/[\s\p{P}\p{S}\p{Cf}]+/gu,"");
@@ -929,6 +1019,15 @@ function rejectProfileInput(input,message) {
 async function googleLogin(form) {
   if(!state.firebase){toast("Firebase 설정을 먼저 완료해 주세요.");return;}
   const data=new FormData(form),studentNumber=String(data.get("studentNumber")||"").trim(),studentName=String(data.get("studentName")||"").trim().replace(/\s+/g," ");
+  const studentNumberInput=form.querySelector("#loginStudentNumber"),studentNameInput=form.querySelector("#loginStudentName");
+  if(studentName&&hasBlockedProfileTerm(studentName)){rejectProfileInput(studentNameInput,"비속어·성적 표현, 도박·사행성 표현, 부적절한 사이트 이름은 사용할 수 없어요.");return;}
+  if(studentName&&!/^[가-힣]{1,24}$/.test(studentName)){rejectProfileInput(studentNameInput,"이름은 한글만 입력해 주세요.");return;}
+  const profileStarted=Boolean(studentNumber||studentName||data.get("publicProfileConsent")==="on");
+  if(profileStarted){
+    if(!/^\d{5}$/.test(studentNumber)){rejectProfileInput(studentNumberInput,"학번은 숫자 5자리로 입력해 주세요.");return;}
+    if(!studentName){rejectProfileInput(studentNameInput,"이름을 한글로 입력해 주세요.");return;}
+    if(data.get("publicProfileConsent")!=="on"){toast("학번과 이름 공개 안내에 동의해 주세요.");form.querySelector('input[name="publicProfileConsent"]')?.focus();return;}
+  }
   const submit=form.querySelector('button[type="submit"]');
   if(submit){submit.disabled=true;submit.querySelector("span:last-child").textContent="로그인 중…";}
   let signedInUser=null,failureMessage="Google 로그인을 완료하지 못했어요. 다시 시도해 주세요.";
@@ -939,11 +1038,9 @@ async function googleLogin(form) {
     const email=String(signedInUser.email||"").trim().toLowerCase();
     if(!signedInUser.emailVerified){failureMessage="Google에서 이메일을 인증한 뒤 다시 로그인해 주세요.";throw new Error("unverified-email");}
     if(email!==ADMIN_EMAIL){
-      const schoolEmail=email.match(SCHOOL_EMAIL_PATTERN);
-      if(!schoolEmail){failureMessage="25-학번@seohyun.hs.kr 형식의 서현고 학교 계정으로 로그인해 주세요.";throw new Error("school-account-required");}
+      if(!SCHOOL_EMAIL_PATTERN.test(email)){failureMessage="25-숫자@seohyun.hs.kr 형식의 서현고 학교 계정으로 로그인해 주세요.";throw new Error("school-account-required");}
       if(!/^\d{5}$/.test(studentNumber)){failureMessage="학번은 숫자 5자리로 입력해 주세요.";throw new Error("invalid-student-number");}
-      if(studentNumber!==schoolEmail[1]){failureMessage="입력한 학번이 로그인한 학교 계정의 학번과 달라요.";throw new Error("student-number-mismatch");}
-      if(hasBlockedProfileTerm(studentName)){failureMessage="비속어·성적 표현이나 부적절한 사이트 이름은 닉네임으로 사용할 수 없어요.";throw new Error("blocked-profile-name");}
+      if(hasBlockedProfileTerm(studentName)){failureMessage="비속어·성적 표현, 도박·사행성 표현, 부적절한 사이트 이름은 닉네임으로 사용할 수 없어요.";throw new Error("blocked-profile-name");}
       if(!/^[가-힣]{1,24}$/.test(studentName)){failureMessage="이름은 한글만 입력해 주세요.";throw new Error("invalid-student-name");}
       if(data.get("publicProfileConsent")!=="on"){failureMessage="학번과 이름이 닉네임으로 공개되는 안내에 동의해 주세요.";throw new Error("profile-consent-required");}
       await updateProfile(signedInUser,{displayName:`${studentNumber} ${studentName}`});
@@ -999,7 +1096,7 @@ document.addEventListener("submit",event=>{
   if(event.target.id==="createDiscussionForm"){event.preventDefault();createDiscussion(event.target);}
   if(event.target.id==="discussionReplyForm"){event.preventDefault();addDiscussionReply(event.target);}
   if(event.target.id==="uploadUrlForm"){
-    event.preventDefault();const data=new FormData(event.target),type=String(data.get("type")||"image"),url=String(data.get("url")||"").trim(),alt=String(data.get("alt")||"사진 설명").trim();
+    event.preventDefault();if(!state.user){toast("문서에 미디어를 넣으려면 먼저 로그인해 주세요.");showLoginModal();return;}const data=new FormData(event.target),type=String(data.get("type")||"image"),url=String(data.get("url")||"").trim(),alt=String(data.get("alt")||"사진 설명").trim();
     try{const parsed=new URL(url);if(!["http:","https:"].includes(parsed.protocol))throw new Error("주소 형식");if(type==="video"&&!/(youtube\.com|youtu\.be|vimeo\.com)/i.test(parsed.hostname))throw new Error("동영상 링크 형식");}
     catch{toast(type==="video"?"공개된 YouTube 또는 Vimeo 주소를 입력해 주세요.":"http 또는 https로 시작하는 공개 주소를 입력해 주세요.");return;}
     state.editorId=null;state.editingDraft={title:"",category:"",body:type==="image"?`![${alt.replace(/[\[\]]/g,"")}](${url})`:url};navigate("editor");toast("파일 주소를 문서 편집기에 넣었어요. 제목과 분류를 고른 뒤 저장해 주세요.");
@@ -1018,8 +1115,9 @@ document.addEventListener("click",async event=>{
     case "open-settings":openSettings();break;
     case "random-doc":openRandomDocument();break;
     case "open-doc":state.docId=id;refreshArticleViews(id);navigate("article");break;
+    case "toc-jump":document.getElementById(target.dataset.headingId)?.scrollIntoView({behavior:"smooth",block:"start"});break;
     case "new-doc":modalClose();startEdit(null,target.dataset.title||"");break;
-    case "copy-doc":{const doc=getDoc(id);if(doc){state.editingDraft={title:`${doc.title} 복사본`,category:WIKI_CATEGORIES.includes(doc.category)?doc.category:"기타",body:docEditorBody(doc)};state.editorId=null;state.pendingChangeKind="copy";navigate("editor");}break;}
+    case "copy-doc":{if(!state.user){toast("문서를 복사하려면 먼저 로그인해 주세요.");showLoginModal();break;}const doc=getDoc(id);if(doc){state.editingDraft={title:`${doc.title} 복사본`,category:WIKI_CATEGORIES.includes(doc.category)?doc.category:"기타",body:docEditorBody(doc)};state.editorId=null;state.pendingChangeKind="copy";navigate("editor");}break;}
     case "edit-doc":startEdit(id);break;
     case "toggle-edit-restriction":toggleEditRestriction(id);break;
     case "cancel-editor":state.editorId=null;state.editingDraft=null;state.pendingChangeKind=null;navigate("home");break;
@@ -1074,9 +1172,10 @@ document.addEventListener("focusin",event=>{if(event.target.id==="heroSearchInpu
 document.addEventListener("focusout",event=>{if(event.target.id==="heroSearchInput"){clearTimeout(searchSuggestionHideTimer);searchSuggestionHideTimer=setTimeout(()=>{searchSuggestionHideTimer=null;if(!document.activeElement?.closest(".search-autocomplete")&&!document.activeElement?.closest("[data-action='trend-search']"))hideSearchSuggestions();},0);}});
 document.addEventListener("input",event=>{
   if(event.target.id==="heroSearchInput")updateSearchSuggestions();
+  if(event.target.id==="adminDocSearch")filterAdminDocRows();
   if(event.target.id==="docBody"){
     state.editingDraft={title:document.querySelector("#docTitle")?.value||"",category:document.querySelector("#docCategory")?.value||"",body:event.target.value};
-    const form=document.querySelector("#editorForm");if(form){const submit=form.querySelector('button[type="submit"]');const chars=event.target.value.length, images=countImages(event.target.value), videos=countVideos(event.target.value);const over=chars>state.config.chars||images>state.config.images||videos>state.config.videos;const count=form.querySelector(".limit-count");count.className=`limit-count ${over?"over":chars>state.config.chars*.8?"near":""}`;count.textContent=over?"관리자 승인 필요":chars>state.config.chars*.8?"제한에 가까워요":"저장 공간 절약 모드";form.querySelectorAll(".limit-chip").forEach((el,i)=>el.innerHTML=[`글자 <strong>${chars.toLocaleString()} / ${state.config.chars.toLocaleString()}</strong>`,`사진 <strong>${images} / ${state.config.images}</strong>`,`동영상 <strong>${videos} / ${state.config.videos}</strong>`][i]);submit.textContent=over?"관리자에게 승인 요청":"문서 저장";}
+    const form=document.querySelector("#editorForm");if(form){const submit=form.querySelector('button[type="submit"]');const chars=event.target.value.length, images=countImages(event.target.value), videos=countVideos(event.target.value);const over=chars>state.config.chars||images>state.config.images||videos>state.config.videos;const count=form.querySelector(".limit-count");count.className=`limit-count ${over?"over":chars>state.config.chars*.8?"near":""}`;count.textContent=over?"관리자 승인 필요":chars>state.config.chars*.8?"제한에 가까워요":"저장 공간 절약 모드";form.querySelectorAll(".limit-chip").forEach((el,i)=>el.innerHTML=[`글자 <strong>${chars.toLocaleString()} / ${state.config.chars.toLocaleString()}</strong>`,`사진 <strong>${images} / ${state.config.images}</strong>`,`동영상 <strong>${videos} / ${state.config.videos}</strong>`][i]);const current=state.editorId?state.docs.find(doc=>doc.id===state.editorId):null;submit.textContent=editorSubmitLabel(current,over);}
   }
   if(event.target.id==="docTitle"||event.target.id==="docCategory"){
     state.editingDraft={title:document.querySelector("#docTitle")?.value||"",category:document.querySelector("#docCategory")?.value||"",body:document.querySelector("#docBody")?.value||""};
@@ -1088,6 +1187,7 @@ document.addEventListener("input",event=>{
   if(current?.editRestricted&&!state.isAdmin){const button=document.querySelector('#editorForm button[type="submit"]');if(button)button.textContent="편집 요청 제출";}
 });
 document.addEventListener("change",event=>{
+  if(event.target.id==="adminDocFilter")filterAdminDocRows();
   if(event.target.id==="settingsArticleSize")savePreference("articleSize",event.target.value);
   if(event.target.id==="docCategory")state.editingDraft={title:document.querySelector("#docTitle")?.value||"",category:event.target.value,body:document.querySelector("#docBody")?.value||""};
 });
