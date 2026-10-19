@@ -139,10 +139,9 @@ async function syncEditorAuthorization(){
   state.editorAccess={canApproveEditRequests:false,canManageRestrictions:false};
   if(!state.isAdmin){state.userProfiles=[];state.editorPermissions={};}
   if(!state.firebase||!state.user)return;
-  const {doc:docRef,getDoc,setDoc,serverTimestamp,collection,getDocs,onSnapshot}=state.firebase.dbSdk;
+  const {doc:docRef,getDoc,collection,getDocs,onSnapshot}=state.firebase.dbSdk;
   try{
-    const profileRef=docRef(state.firebase.db,"userProfiles",state.user.uid);
-    await setDoc(profileRef,{uid:state.user.uid,email:state.user.email||"",displayName:state.user.displayName||"",updatedAt:serverTimestamp()},{merge:true});
+    await cloudSaveUserProfile(state.user);
     const permissionRef=docRef(state.firebase.db,"editorPermissions",state.user.uid);
     const applyPermission=permission=>{
       const data=permission.exists()?permission.data():{};
@@ -166,6 +165,14 @@ async function syncEditorAuthorization(){
       state.adminPermissionsUnsubscribe=onSnapshot(collection(state.firebase.db,"editorPermissions"),snapshot=>{state.editorPermissions=Object.fromEntries(snapshot.docs.map(item=>[item.id,item.data()]));if(state.view==="admin"&&modalWrap.hidden&&!document.activeElement?.matches("input,textarea"))render();},error=>console.warn("편집 권한 목록 동기화에 실패했습니다.",error));
     }
   }catch(error){console.warn("편집 권한 정보를 불러오지 못했습니다.",error);}
+}
+async function cloudSaveUserProfile(user=state.user){
+  if(!state.firebase||!user)return;
+  const {doc:docRef,setDoc,serverTimestamp}=state.firebase.dbSdk;
+  const profile={uid:user.uid,email:user.email||"",updatedAt:serverTimestamp()};
+  const displayName=String(user.displayName||"").trim();
+  if(displayName)profile.displayName=displayName;
+  await setDoc(docRef(state.firebase.db,"userProfiles",user.uid),profile,{merge:true});
 }
 async function syncDocsFromCloud() {
   if(!state.firebase)return;
@@ -923,9 +930,11 @@ async function googleLogin(form) {
     const provider=new GoogleAuthProvider();provider.setCustomParameters({prompt:"select_account"});
     const credential=await signInWithPopup(state.firebase.auth,provider);signedInUser=credential.user;
     await updateProfile(signedInUser,{displayName:nickname});
-    await reload(signedInUser);state.user=state.firebase.auth.currentUser;state.isAdmin=Boolean(state.user?.emailVerified&&state.user.email?.toLowerCase()===ADMIN_EMAIL);state.demoAdmin=false;
+    await reload(signedInUser);state.user=state.firebase.auth.currentUser||signedInUser;
+    try{await cloudSaveUserProfile(state.user);}catch(profileError){console.warn("닉네임 프로필 저장에 실패했습니다.",profileError);}
+    state.isAdmin=Boolean(state.user?.emailVerified&&state.user.email?.toLowerCase()===ADMIN_EMAIL);state.demoAdmin=false;
     await syncEditorAuthorization();
-    updateAccountButton();modalClose();render();toast("로그인했어요. 닉네임이 설정되었습니다.");
+    updateAccountButton();modalClose();render();toast("로그인했어요. 학번과 이름을 계정 닉네임으로 저장했습니다.");
   }
   catch(err){
     console.error(err);
