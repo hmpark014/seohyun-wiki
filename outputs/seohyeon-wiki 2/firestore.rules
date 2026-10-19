@@ -1,0 +1,77 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    function signedIn() {
+      return request.auth != null && request.auth.token.email_verified == true;
+    }
+    function isAdmin() {
+      return signedIn() && request.auth.token.email == 'hmpark014@gmail.com';
+    }
+    function withinDefaultLimits(data) {
+      return data.body is string
+        && data.body.size() <= 18000
+        && (!('images' in data) || (data.images is list && data.images.size() <= 2))
+        && (!('videos' in data) || (data.videos is list && data.videos.size() <= 0));
+    }
+
+    match /docs/{docId} {
+      allow read: if isAdmin() || resource.data.status == 'published';
+      allow create: if signedIn()
+        && request.resource.data.status == 'published'
+        && (isAdmin() || withinDefaultLimits(request.resource.data));
+      allow update: if signedIn()
+        && (isAdmin() || (withinDefaultLimits(request.resource.data)
+          && request.resource.data.status == 'published'));
+      allow delete: if isAdmin();
+    }
+
+    match /limitRequests/{requestId} {
+      allow read: if isAdmin();
+      allow create: if signedIn()
+        && request.resource.data.ownerUid == request.auth.uid
+        && request.resource.data.status == 'pending'
+        && request.resource.data.body is string
+        && request.resource.data.body.size() <= 180000
+        && request.resource.data.mediaImages is list
+        && request.resource.data.mediaImages.size() <= 20
+        && request.resource.data.mediaVideos is list
+        && request.resource.data.mediaVideos.size() <= 10;
+      allow update: if isAdmin();
+      allow delete: if isAdmin();
+    }
+
+    match /reports/{reportId} {
+      allow read: if isAdmin();
+      allow create: if request.resource.data.docId is string
+        && request.resource.data.docId.size() <= 200
+        && request.resource.data.reason is string
+        && request.resource.data.reason.size() <= 1500
+        && request.resource.data.status == 'pending';
+      allow update: if isAdmin();
+      allow delete: if isAdmin();
+    }
+
+    match /searches/{searchId} {
+      allow read: if true;
+      allow create: if searchId.size() <= 1000
+        && request.resource.data.keys().hasOnly(['term', 'day', 'count', 'updatedAt'])
+        && request.resource.data.count is int
+        && request.resource.data.count == 1
+        && request.resource.data.term is string
+        && request.resource.data.term.size() <= 300
+        && request.resource.data.day is string
+        && request.resource.data.day.size() == 10;
+      allow update: if request.resource.data.keys().hasOnly(['term', 'day', 'count', 'updatedAt'])
+        && request.resource.data.count is int
+        && request.resource.data.term == resource.data.term
+        && request.resource.data.day == resource.data.day
+        && request.resource.data.count == resource.data.count + 1;
+      allow delete: if isAdmin();
+    }
+
+    match /settings/{settingId} {
+      allow read: if true;
+      allow write: if isAdmin();
+    }
+  }
+}

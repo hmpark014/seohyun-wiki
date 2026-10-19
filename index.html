@@ -1,0 +1,47 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="theme-color" content="#17118e" />
+  <title>서현고위키</title>
+  <link rel="icon" type="image/png" href="assets/seohyeon-wiki-mark.png?v=6" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Noto+Sans+KR:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="styles.css?v=47" />
+</head>
+<body>
+  <div class="app-shell">
+    <header class="topbar">
+      <button class="brand" type="button" aria-label="서현고위키 홈" data-view="home">
+        <img class="brand-logo" src="assets/seohyeon-wiki-mark.png?v=6" alt="서현고위키 로고" />
+      </button>
+      <div class="topbar-search-slot" id="topbarSearchMount"><form class="topbar-search search-autocomplete" id="heroSearchForm" role="search">
+        <div class="topbar-search-field search-autocomplete">
+          <input id="heroSearchInput" maxlength="100" placeholder="문서 검색" autocomplete="off" aria-label="서현고위키 검색" role="combobox" aria-autocomplete="list" aria-expanded="false" aria-controls="searchSuggestions" />
+          <button type="submit" aria-label="검색"> <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="10.8" cy="10.8" r="6.6"></circle><path d="m16 16 4.3 4.3"></path></svg></button>
+          <div class="search-suggestions" id="searchSuggestions" role="listbox" aria-label="검색 제안" hidden></div>
+        </div>
+      </form></div>
+      <div class="topbar-spacer"></div>
+      <button class="shuffle-button" type="button" data-action="random-doc" aria-label="랜덤 문서 열기" title="랜덤 문서 열기"><svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="m18 14 4 4-4 4M18 2l4 4-4 4M2 18h2.5a5 5 0 0 0 4-2l7-8a5 5 0 0 1 4-2H22M2 6h2.5a5 5 0 0 1 4 2l1 1M14 15l2 2a5 5 0 0 0 4 2H22"></path></svg></button>
+      <button class="icon-button theme-button" id="themeButton" type="button" title="다크 모드로 전환" aria-label="다크 모드로 전환"><svg viewBox="0 0 24 24" class="sun-icon"><circle cx="12" cy="12" r="3.7"></circle><path d="M12 2v2m0 16v2M4.93 4.93l1.42 1.42m11.3 11.3 1.42 1.42M2 12h2m16 0h2M4.93 19.07l1.42-1.42m11.3-11.3 1.42-1.42"></path></svg><svg viewBox="0 0 24 24" class="moon-icon"><path d="M20.5 15.4A8.5 8.5 0 0 1 8.6 3.5 8.6 8.6 0 1 0 20.5 15.4Z"></path></svg></button>
+      <button class="account-button" id="accountButton"><span class="avatar" id="avatarInitial"><svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><circle cx="12" cy="7" r="4.2"></circle><path d="M2.8 21c.4-4.8 4.3-8 9.2-8s8.8 3.2 9.2 8c.1.8-.5 1.5-1.3 1.5H4.1c-.8 0-1.4-.7-1.3-1.5Z"></path></svg></span><span id="accountLabel">로그인</span><svg viewBox="0 0 24 24"><path d="m7 10 5 5 5-5"></path></svg></button>
+      <button class="logout-button" id="logoutButton" type="button" data-action="sign-out" hidden>로그아웃</button>
+    </header>
+
+    <main id="mainContent" tabindex="-1"></main>
+    <footer class="site-footer"><span>서현고위키</span><span>우리 학교의 이야기를 함께 기록해요.</span><button type="button" id="footerAbout">이용 안내</button></footer>
+  </div>
+
+  <div class="toast" id="toast" role="status" aria-live="polite"></div>
+  <div class="modal-backdrop" id="modalBackdrop" hidden>
+    <section class="modal" id="modal" role="dialog" aria-modal="true" aria-labelledby="modalTitle"></section>
+  </div>
+  <div class="sr-only" id="liveRegion" aria-live="polite"></div>
+  <script>if(location.hostname === "localhost" && new URLSearchParams(location.search).has("appcheckdebug")) self.FIREBASE_APPCHECK_DEBUG_TOKEN = true;</script>
+  <script src="firebase-config.js?v=1"></script>
+  <script src="app.js?v=69"></script>
+</body>
+</html>
