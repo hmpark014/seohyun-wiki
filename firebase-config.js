@@ -9,7 +9,8 @@ window.SEOHYEON_FIREBASE = {
     messagingSenderId: "30484472118",
     appId: "1:30484472118:web:ee1e1a9a8bfebe14251397"
   },
-  // Optional: register a reCAPTCHA v3 site key in Firebase App Check for production.
+  // Public reCAPTCHA Enterprise site key registered in Firebase App Check for this web app.
+  // Never put the matching secret key in this file.
   appCheckSiteKey: ""
 };
 window.SEOHYEON_FIREBASE.isFirebaseConfigured = Boolean(

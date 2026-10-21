@@ -17,7 +17,7 @@ python3 -m http.server 8000
 1. Firebase 프로젝트를 만들고 웹 앱을 추가합니다.
 2. Authentication에서 Google 로그인을 켜고, Firestore Database를 만들고, `firestore.rules`를 배포합니다.
 3. `firebase-config.js`의 빈 값을 Firebase 콘솔의 웹 앱 설정으로 채웁니다.
-4. Firebase 콘솔의 AI Logic에서 Gemini Developer API를 설정하고, 프로덕션 앱에는 App Check를 설정합니다. `firebase-config.js`에 reCAPTCHA v3 사이트 키를 넣고 App Check를 Firestore와 AI Logic에 적용하세요. 로컬에서는 `http://localhost:8000/?appcheckdebug=1`로 실행하면 디버그 모드가 켜집니다. Firebase 콘솔에 표시되는 디버그 토큰을 허용 목록에 등록하고, 그 토큰을 프로덕션에 쓰지 마세요.
+4. Firebase 콘솔의 AI Services → AI Logic에서 Gemini Developer API를 설정합니다. AI Logic에서 App Check가 적용된 프로젝트의 웹 앱은 reCAPTCHA Enterprise를 사용해야 합니다. 운영 도메인을 등록한 공개 사이트 키를 Firebase App Check 웹 앱 등록에 사용하고, 해당 사이트 키를 `firebase-config.js`의 `appCheckSiteKey`에 입력하세요. reCAPTCHA 비밀 키는 코드에 넣지 마세요. 로컬에서는 `http://localhost:8000/?appcheckdebug=1`로 실행하고, 콘솔에 표시되는 App Check 디버그 토큰을 Firebase 허용 목록에 등록합니다. 디버그 토큰은 운영 사이트에 사용하지 마세요.
 5. 정적 호스팅에 이 파일들을 배포합니다. 로그인·문서 편집은 Firebase 설정을 채운 뒤 인증된 사용자에게 제공됩니다.
 
 ```sh
@@ -40,5 +40,5 @@ firebase deploy --only hosting,firestore:rules
 
 ### Firebase AI Logic 참고
 
-Firebase AI Logic은 웹 SDK에서 `getAI`와 `getGenerativeModel`을 사용해 연결할 수 있습니다. Gemini Developer API는 무료 사용 구간이 있지만, 모델/API 사용량과 쿼터 정책은 별도로 확인해야 합니다. AI Logic의 App Check가 강제된 프로젝트에서는 공식 Firebase 안내에 따라 localhost용 디버그 토큰 또는 프로덕션용 attestation 공급자를 준비하세요. `firebase-config.js`의 `appCheckSiteKey`에 프로덕션용 reCAPTCHA v3 사이트 키를 넣으면 앱이 App Check를 초기화합니다.
+Firebase AI Logic은 웹 SDK에서 `getAI`와 `getGenerativeModel`을 사용해 연결합니다. 현재 앱은 Gemini Developer API의 `gemini-3.8-flash` 모델을 사용합니다. 모델과 API의 사용량 한도 및 요금은 Firebase 콘솔에서 확인하세요. AI Logic에서 App Check가 적용되면 유효한 토큰이 없는 요청은 차단됩니다. 운영 웹 앱에는 reCAPTCHA Enterprise 사이트 키를 사용하고, 로컬 개발에서는 이 앱의 `?appcheckdebug=1` 모드와 Firebase에 등록한 디버그 토큰을 사용하세요.
 
