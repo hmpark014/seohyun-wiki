@@ -40,8 +40,8 @@ body.dark .hero-title{ text-shadow:0 2px 20px #08152b50 }body.dark .hero-title-b
 body.dark .article-toc-top{background:var(--soft);border-color:var(--line)}
 @media(max-width:430px){.article-toc-top{gap:7px;padding:8px}.article-toc-top .toc-title{margin-top:5px}}
 body.dark .widget-card{background:rgba(29,33,51,.96);border-color:#ffffff20;box-shadow:0 8px 32px #050a1c38}
-.brand-logo{display:block;width:90px;height:auto;max-height:48px;object-fit:contain;flex:none}
-@media(max-width:760px){.brand-logo{width:72px;max-height:38px}}
+.brand-logo{display:block;width:100px;height:50px;object-fit:fill;image-rendering:auto;flex:none}
+@media(max-width:760px){.brand-logo{width:80px;height:40px}}
 body.dark .widget-heading,body.dark .widget-item{color:#e2e5f2}body.dark .widget-more,body.dark .widget-meta{color:#a7adc1}
 body.dark .widget-icon{background:#343356;color:#c3bfff}body.dark .widget-empty{color:#abb0c0}
 body.dark .hero-search{background:#252a40;box-shadow:0 8px 30px #050a1c55}body.dark .hero-search input{color:#f0f2fa}body.dark .hero-search input::placeholder{color:#aeb4c5}body.dark .hero-search>button{color:#f0f2fa}
