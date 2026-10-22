@@ -45,6 +45,7 @@ body.dark .widget-card{background:rgba(29,33,51,.96);border-color:#ffffff20;box-
 body.dark .widget-heading,body.dark .widget-item{color:#e2e5f2}body.dark .widget-more,body.dark .widget-meta{color:#a7adc1}
 body.dark .widget-icon{background:#343356;color:#c3bfff}body.dark .widget-empty{color:#abb0c0}
 body.dark .hero-search{background:#252a40;box-shadow:0 8px 30px #050a1c55}body.dark .hero-search input{color:#f0f2fa}body.dark .hero-search input::placeholder{color:#aeb4c5}body.dark .hero-search>button{color:#f0f2fa}
+body.dark .topbar-search-field{background:#252a40;border-color:#464961;color:#f0f2fa;box-shadow:0 2px 8px #050a1c66}body.dark .topbar-search-field input{color:#f0f2fa}body.dark .topbar-search-field input::placeholder{color:#aeb4c5}body.dark .topbar-search-field>button{color:#f0f2fa}body.dark .topbar-search-field>button:hover{background:#3b3e55}
 body.dark .hero-tool{background:#292e49;color:#f2f3ff;box-shadow:0 8px 30px #050a1c55}body.dark .hero-tool:hover{background:#373960}
 .home-widgets{align-items:stretch;gap:14px}
 .widget-card{min-height:0;padding:18px;display:flex;flex-direction:column;gap:12px;border-radius:16px;background:rgba(255,255,255,.98);border:1px solid rgba(255,255,255,.82);box-shadow:0 10px 28px rgba(17,39,80,.13);transition:box-shadow .18s,border-color .18s}
