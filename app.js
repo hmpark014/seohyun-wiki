@@ -23,7 +23,7 @@ const LEGACY_SAMPLE_VIEW_SEEDS = {"seohyeon-high-school":248,"school-meals":173,
 const state = {
   view:"home", query:"", docs:[], user:null, isAdmin:false, demoAdmin:false,
   config:{...DEFAULT_LIMITS}, requests:[], editRequests:[], userProfiles:[], editorPermissions:{}, editorAccess:{canApproveEditRequests:false,canManageRestrictions:false}, reports:[], searches:{}, discussions:[], changes:[], chat:[], adminTab:"overview",
-  rankPeriod:"today", changeFilter:"all", discussionTab:"open", discussionId:null, specialTool:"stale", editorId:null, editingDraft:null, docId:null, results:[], searchSuggestions:[], searchSuggestionIndex:-1, firebase:null, firebaseReady:false, firebaseSetupPromise:null, gemini:null, aiSetupIssue:null, aiSetupErrorCode:null, searchUnsubscribe:null,
+  rankPeriod:"today", changeFilter:"all", discussionTab:"open", discussionId:null, specialTool:"stale", editorId:null, editingDraft:null, docId:null, results:[], searchSuggestions:[], searchSuggestionIndex:-1, firebase:null, firebaseReady:false, firebaseSetupPromise:null, gemini:null, aiSetupIssue:null, aiSetupErrorCode:null, searchUnsubscribe:null, chatSending:false,
   toastTimer:null, pendingApproval:null, communityUnsubscribers:[], editorPermissionUnsubscribe:null, editRequestsUnsubscribe:null, adminRequestsUnsubscribe:null, adminProfilesUnsubscribe:null, adminPermissionsUnsubscribe:null
 };
 let recommendationTimer=null;
@@ -757,10 +757,10 @@ function renderUpload() {
   return `<div class="content-page"><div class="page-title-row"><div><p class="eyebrow">Media links</p><h1 class="page-title">파일 올리기</h1><p class="page-subtitle">문서에 연결할 사진 또는 동영상 주소를 추가해요.</p></div></div><section class="panel upload-panel"><div class="admin-callout">${icons.shield}<span>Firebase Storage 직접 업로드는 현재 연결되어 있지 않아요. 무료 저장 공간을 아끼기 위해 공개된 파일 주소를 문서에 연결하는 방식으로 지원합니다. 사진 ${state.config.images}개, 동영상 ${state.config.videos}개 제한은 문서 저장 때 적용돼요.</span></div><form id="uploadUrlForm"><div class="field"><label for="uploadType">파일 종류</label><select id="uploadType" name="type"><option value="image">사진</option><option value="video">동영상 링크</option></select></div><div class="field"><label for="uploadUrl">공개 파일 주소</label><input id="uploadUrl" name="url" class="upload-url" type="url" placeholder="https://" required></div><div class="field"><label for="uploadAlt">사진 설명 (선택)</label><input id="uploadAlt" name="alt" placeholder="예: 학교 행사 안내 사진"></div><button class="button button-primary" type="submit">문서 편집기에 넣기 ${icons.arrow}</button></form><p class="field-hint" style="margin-top:14px">외부 주소를 사용할 때는 이용 권한이 있는 자료인지 확인하고, 학생 얼굴이나 개인 정보가 보이는 사진은 올리지 마세요.</p></section></div>`;
 }
 function renderAI() {
-  const messages=state.chat.length?state.chat.map(m=>`<div class="chat-message ${m.role}"><small>${m.role==="user"?"나":"서현위키 AI"}</small>${esc(m.text)}${m.sources?.length?`<div class="chat-sources">참고 문서: ${m.sources.map(id=>{const d=getDoc(id);return d?`<button data-action="open-doc" data-id="${esc(d.id)}">${esc(d.title)}</button>`:"";}).filter(Boolean).join(" · ")}</div>`:""}</div>`).join(""):`<div class="chat-message assistant"><small>서현위키 AI</small>안녕하세요! 서현위키 문서를 바탕으로 질문에 답해드릴게요. 학교와 관련된 궁금한 점을 편하게 물어보세요.</div>`;
+  const messages=state.chat.length?state.chat.map(m=>`<div class="chat-message ${m.role}${m.entering?" is-entering":""}${m.pending?" is-pending":""}"><small>${m.role==="user"?"나":"서현위키 AI"}</small>${m.pending?`<span>답을 찾고 있어요</span><span class="chat-typing-dots" aria-hidden="true"><i></i><i></i><i></i></span>`:esc(m.text)}${m.sources?.length?`<div class="chat-sources">참고 문서: ${m.sources.map(id=>{const d=getDoc(id);return d?`<button data-action="open-doc" data-id="${esc(d.id)}">${esc(d.title)}</button>`:"";}).filter(Boolean).join(" · ")}</div>`:""}</div>`).join(""):`<div class="chat-message assistant"><small>서현위키 AI</small>안녕하세요! 서현위키 문서를 바탕으로 질문에 답해드릴게요. 학교와 관련된 궁금한 점을 편하게 물어보세요.</div>`;
   const suggestions=state.chat.length?"":`<div class="suggestions"><button class="suggestion" data-action="suggest-question" data-question="서현위키에는 어떤 문서가 있어?">어떤 문서가 있어?</button><button class="suggestion" data-action="suggest-question" data-question="문서를 편집할 때 지켜야 할 점은 뭐야?">문서 편집 안내</button><button class="suggestion" data-action="suggest-question" data-question="학교 행사 정보는 어디서 확인해?">학교 행사 정보</button></div>`;
   const setupNotice=state.aiSetupIssue?`<div class="admin-callout ai-setup-notice">${icons.shield}<span>${esc(state.isAdmin?state.aiSetupIssue:"AI 답변 연결을 준비 중이에요. 문제가 계속되면 관리자에게 알려 주세요.")}</span></div>`:"";
-  return `<div class="ai-layout"><div class="ai-heading"><span class="ai-spark">${icons.spark}</span><div><h1>서현위키 AI</h1><p>위키 문서에서 답을 찾고 출처를 함께 알려드려요.</p></div></div>${setupNotice}<section class="panel chat-panel"><div class="chat-messages" id="chatMessages">${messages}</div>${suggestions}<form class="chat-composer" id="chatForm"><textarea id="chatInput" rows="1" maxlength="500" placeholder="서현고등학교에 대해 물어보세요..." required></textarea><button class="chat-send" type="submit" aria-label="질문 보내기">${icons.arrow}</button></form></section><p class="chat-footnote">AI 답변은 틀릴 수 있어요. 중요한 정보는 문서와 공식 공지를 함께 확인해 주세요.</p></div>`;
+  return `<div class="ai-layout"><div class="ai-heading"><span class="ai-spark">${icons.spark}</span><div><h1>서현위키 AI</h1><p>위키 문서에서 답을 찾고 출처를 함께 알려드려요.</p></div></div>${setupNotice}<section class="panel chat-panel"><div class="chat-messages" id="chatMessages">${messages}</div>${suggestions}<form class="chat-composer" id="chatForm"><textarea id="chatInput" rows="1" maxlength="500" placeholder="서현고등학교에 대해 물어보세요..." aria-label="질문 입력" ${state.chatSending?"disabled":""} required></textarea><button class="chat-send" type="submit" aria-label="질문 보내기" title="질문 보내기" ${state.chatSending?"disabled":""}>${icons.arrow}</button></form></section><p class="chat-footnote">AI 답변은 틀릴 수 있어요. 중요한 정보는 문서와 공식 공지를 함께 확인해 주세요.</p></div>`;
 }
 const AI_QUERY_STOP_WORDS=new Set(["어디","어디야","무엇","뭐","어떤","무슨","대해","알려줘","말해줘","설명해줘","정리해줘","찾아줘","있나요","인가요","인가","해줘","해주세요","해","좀","정보","내용","관련"]);
 const KOREAN_PARTICLE_SUFFIX=/^(.*?)(?:으로부터|에게서|에서는|으로|에서|에게|까지|부터|처럼|보다|이라서|이라|라고|은|는|이|가|을|를|의|에|와|과|로|도|만|랑|께)$/u;
@@ -1312,6 +1312,7 @@ document.addEventListener("focusin",event=>{if(event.target.id==="heroSearchInpu
 document.addEventListener("focusout",event=>{if(event.target.id==="heroSearchInput"){clearTimeout(searchSuggestionHideTimer);searchSuggestionHideTimer=setTimeout(()=>{searchSuggestionHideTimer=null;if(!document.activeElement?.closest(".search-autocomplete")&&!document.activeElement?.closest("[data-action='trend-search']"))hideSearchSuggestions();},0);}});
 document.addEventListener("input",event=>{
   if(event.target.id==="heroSearchInput")updateSearchSuggestions();
+  if(event.target.id==="chatInput")resizeChatInput(event.target);
   if(event.target.id==="adminDocSearch")filterAdminDocRows();
   if(event.target.id==="docBody"){
     state.editingDraft={title:document.querySelector("#docTitle")?.value||"",category:document.querySelector("#docCategory")?.value||"",body:event.target.value};
@@ -1332,6 +1333,12 @@ document.addEventListener("change",event=>{
   if(event.target.id==="docCategory")state.editingDraft={title:document.querySelector("#docTitle")?.value||"",category:event.target.value,body:document.querySelector("#docBody")?.value||""};
 });
 document.addEventListener("keydown",event=>{
+  if(event.target.id==="chatInput"&&event.key==="Enter"&&!event.shiftKey){
+    if(event.isComposing||event.keyCode===229)return;
+    event.preventDefault();
+    if(!state.chatSending)sendChat();
+    return;
+  }
   if(event.target.id==="heroSearchInput"&&!document.querySelector("#searchSuggestions")?.hidden){
     if(event.key==="ArrowDown"){event.preventDefault();setSearchSuggestionActive(state.searchSuggestionIndex+1);return;}
     if(event.key==="ArrowUp"){event.preventDefault();setSearchSuggestionActive(state.searchSuggestionIndex<0?state.searchSuggestions.length-1:state.searchSuggestionIndex-1);return;}
@@ -1350,10 +1357,18 @@ function syncThemeButton(){const button=document.querySelector("#themeButton");i
 function saveLimits(){document.querySelectorAll("[data-setting]").forEach(input=>{const value=Number(input.value);if(Number.isFinite(value))state.config[input.dataset.setting]=Math.max(0,Math.min(input.dataset.setting==="chars"?50000:20,value));});if(state.config.chars<500)state.config.chars=500;saveLocal();modalClose();render();toast("작성 제한을 저장했어요. Firestore 보안 규칙도 같은 값으로 업데이트해 주세요.");}
 function insertMarkup(markup){const area=document.querySelector("#docBody");if(!area)return;const start=area.selectionStart,end=area.selectionEnd;area.setRangeText(markup,start,end,"end");area.focus();area.dispatchEvent(new Event("input",{bubbles:true}));}
 async function sendChat(){
-  const input=document.querySelector("#chatInput");if(!input)return;const question=input.value.trim();if(!question)return;
-  state.chat.push({role:"user",text:question});render();const box=document.querySelector("#chatMessages");box.scrollTop=box.scrollHeight;state.chat.push({role:"assistant",text:"답을 찾고 있어요…",sources:[]});render();
-  const response=await askAI(question);state.chat[state.chat.length-1]={role:"assistant",...response};render();const newBox=document.querySelector("#chatMessages");newBox.scrollTop=newBox.scrollHeight;
+  const input=document.querySelector("#chatInput");if(!input||state.chatSending)return;const question=input.value.trim();if(!question)return;
+  state.chatSending=true;
+  state.chat.push({role:"user",text:question,entering:true});
+  const pendingIndex=state.chat.push({role:"assistant",text:"",sources:[],pending:true,entering:true})-1;
+  render();state.chat.forEach(message=>{message.entering=false;});scrollChatToBottom();
+  let response;
+  try{response=await askAI(question);}
+  catch(error){console.error("서현위키 AI 응답 실패:",error);response={text:"답변을 불러오지 못했어요. 잠시 후 다시 시도해 주세요.",sources:[]};}
+  state.chat[pendingIndex]={role:"assistant",...response,entering:true};state.chatSending=false;render();state.chat[pendingIndex].entering=false;scrollChatToBottom();
 }
+function resizeChatInput(input){input.style.height="auto";const maxHeight=140;input.style.height=`${Math.min(input.scrollHeight,maxHeight)}px`;input.style.overflowY=input.scrollHeight>maxHeight?"auto":"hidden";}
+function scrollChatToBottom(){requestAnimationFrame(()=>{const box=document.querySelector("#chatMessages");box?.scrollTo({top:box.scrollHeight,behavior:"smooth"});});}
 
 loadLocal();
 if(location.hash.startsWith("#doc=")){const id=decodeURIComponent(location.hash.slice(5));if(getDoc(id))state.view="article",state.docId=id;}
