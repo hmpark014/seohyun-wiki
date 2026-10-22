@@ -762,9 +762,71 @@ function renderAI() {
   const setupNotice=state.aiSetupIssue?`<div class="admin-callout ai-setup-notice">${icons.shield}<span>${esc(state.isAdmin?state.aiSetupIssue:"AI 답변 연결을 준비 중이에요. 문제가 계속되면 관리자에게 알려 주세요.")}</span></div>`:"";
   return `<div class="ai-layout"><div class="ai-heading"><span class="ai-spark">${icons.spark}</span><div><h1>서현위키 AI</h1><p>위키 문서에서 답을 찾고 출처를 함께 알려드려요.</p></div></div>${setupNotice}<section class="panel chat-panel"><div class="chat-messages" id="chatMessages">${messages}</div>${suggestions}<form class="chat-composer" id="chatForm"><textarea id="chatInput" rows="1" maxlength="500" placeholder="서현고등학교에 대해 물어보세요..." required></textarea><button class="chat-send" type="submit" aria-label="질문 보내기">${icons.arrow}</button></form></section><p class="chat-footnote">AI 답변은 틀릴 수 있어요. 중요한 정보는 문서와 공식 공지를 함께 확인해 주세요.</p></div>`;
 }
+const AI_QUERY_STOP_WORDS=new Set(["어디","어디야","무엇","뭐","어떤","무슨","대해","알려줘","말해줘","설명해줘","정리해줘","찾아줘","있나요","인가요","인가","해줘","해주세요","해","좀","정보","내용","관련"]);
+const KOREAN_PARTICLE_SUFFIX=/^(.*?)(?:으로부터|에게서|에서는|으로|에서|에게|까지|부터|처럼|보다|이라서|이라|라고|은|는|이|가|을|를|의|에|와|과|로|도|만|랑|께)$/u;
+function aiSearchTerms(value="") {
+  return [...new Set(String(value).toLocaleLowerCase("ko").normalize("NFKC").replace(/[^\p{L}\p{N}]+/gu," ").split(/\s+/).filter(term=>term.length>1&&!AI_QUERY_STOP_WORDS.has(term)))];
+}
+function aiTokenMatches(left,right) {
+  if(left===right)return true;
+  const leftStem=left.replace(KOREAN_PARTICLE_SUFFIX,"$1"),rightStem=right.replace(KOREAN_PARTICLE_SUFFIX,"$1");
+  return leftStem.length>1&&rightStem.length>1&&leftStem===rightStem;
+}
+function aiTermsContain(documentTerms,queryTerm) {
+  return documentTerms.some(documentTerm=>aiTokenMatches(queryTerm,documentTerm));
+}
+function aiRelevantTextWindow(text,terms,limit,termWeights) {
+  if(text.length<=limit)return text;
+  const matches=[...text.matchAll(/[\p{L}\p{N}]+/gu)].flatMap(token=>terms.filter(term=>aiTokenMatches(term,token[0].toLocaleLowerCase("ko"))).map(term=>({index:token.index,weight:termWeights.get(term)||0})));
+  const match=matches.sort((a,b)=>b.weight-a.weight||a.index-b.index)[0];
+  if(!match)return text.slice(0,limit);
+  const start=Math.max(0,match.index-Math.floor(limit/4));
+  const end=Math.min(text.length,start+limit);
+  return `${start>0?"…":""}${text.slice(start,end)}${end<text.length?"…":""}`;
+}
 function rankRelevantDocs(question) {
-  const terms=question.toLowerCase().replace(/[?？!,.]/g," ").split(/\s+/).filter(t=>t.length>1);
-  return liveDocs().map(d=>{const all=`${d.title} ${d.summary} ${d.category} ${d.body}`.toLowerCase();let score=terms.reduce((sum,t)=>sum+(d.title.toLowerCase().includes(t)?4:all.includes(t)?1:0),0);return {...d,score};}).filter(d=>d.score>0).sort((a,b)=>b.score-a.score).slice(0,4);
+  const terms=aiSearchTerms(question);
+  if(!terms.length)return [];
+  return liveDocs().map(doc=>{
+    const titleTerms=aiSearchTerms(doc.title);
+    const summaryTerms=aiSearchTerms(doc.summary||"");
+    const categoryTerms=aiSearchTerms(doc.category||"");
+    const bodyTerms=aiSearchTerms(doc.body||"");
+    let score=0,matchedTerms=0;
+    terms.forEach(term=>{
+      if(aiTermsContain(titleTerms,term)){score+=8;matchedTerms++;}
+      else if(aiTermsContain(summaryTerms,term)){score+=3;matchedTerms++;}
+      else if(aiTermsContain(bodyTerms,term)){score+=2;matchedTerms++;}
+      else if(aiTermsContain(categoryTerms,term)){score+=1;matchedTerms++;}
+    });
+    return {...doc,score,matchedTerms};
+  }).filter(doc=>doc.matchedTerms>=Math.min(2,terms.length)).sort((a,b)=>b.score-a.score).slice(0,4);
+}
+function buildAIExcerpt(doc,question) {
+  const body=String(doc.body||"");
+  if(body.length<=5000)return body;
+  const terms=aiSearchTerms(question);
+  const bodyTerms=aiSearchTerms(body);
+  const titleTerms=aiSearchTerms(doc.title||"");
+  const termWeights=new Map(terms.map(term=>[term,(aiTermsContain(titleTerms,term)?0.25:1)/Math.max(1,bodyTerms.filter(bodyTerm=>aiTokenMatches(term,bodyTerm)).length)]));
+  const paragraphs=body.split(/\n\s*\n/).map(text=>text.trim()).filter(Boolean);
+  const relevant=paragraphs.map((text,index)=>({text,index,score:terms.reduce((sum,term)=>sum+(aiTermsContain(aiSearchTerms(text),term)?termWeights.get(term):0),0)})).filter(item=>item.score>0).sort((a,b)=>b.score-a.score||a.index-b.index);
+  const selected=new Set(),parts=[];
+  let length=0;
+  const addPart=(text,index)=>{
+    if(selected.has(index)||length>=5000)return;
+    const remaining=5000-length-(parts.length?2:0);
+    if(remaining<80)return;
+    const part=aiRelevantTextWindow(text,terms,remaining,termWeights);
+    parts.push(part);selected.add(index);length+=part.length+(parts.length>1?2:0);
+  };
+  if(paragraphs[0]?.length<=600)addPart(paragraphs[0],0);
+  for(const item of relevant){
+    const heading=paragraphs[item.index-1];
+    if(heading&&/^\s*(?:#{1,3}\s|\[(?:제목|소제목)\])/u.test(heading))addPart(heading,item.index-1);
+    addPart(item.text,item.index);
+  }
+  return parts.length?parts.join("\n\n"):body.slice(0,5000);
 }
 function isDocumentCatalogQuestion(question="") {
   return /(?:어떤|무슨|무엇|전체|모든|목록).{0,12}문서|문서.{0,16}(?:어떤|무슨|뭐|목록|이름|있|등록|올라)/i.test(question);
@@ -778,7 +840,7 @@ async function askAI(question) {
     const titles=shown.map(d=>d.title).join(", ");
     return {text:documents.length?`현재 공개된 문서는 ${documents.length}개예요${titles?`: ${titles}`:""}${documents.length>shown.length?` 외 ${documents.length-shown.length}개`:""}.`:"현재 공개된 문서가 아직 없어요. 문서가 등록된 뒤 다시 질문해 주세요.",sources:shown.map(d=>d.id)};
   }
-  const sourceText=matches.map(d=>`[${d.title}]\n${d.body.slice(0,5000)}`).join("\n\n");
+  const sourceText=matches.map(d=>`[${d.title}]\n${buildAIExcerpt(d,question)}`).join("\n\n");
   if(isFirebaseConfigured&&(!state.firebaseReady||!state.gemini)){
     const message=state.aiSetupIssue||"AI 연결을 준비하고 있어요. 잠시 후 다시 시도해 주세요.";
     const code=state.aiSetupErrorCode?` (오류 코드: ${state.aiSetupErrorCode})`:"";
