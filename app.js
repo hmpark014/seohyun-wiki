@@ -21,9 +21,9 @@ const SEED_DOCS = [
 const LEGACY_SAMPLE_VIEW_SEEDS = {"seohyeon-high-school":248,"school-meals":173,"clubs":121,"school-events":96,"wiki-guide":73};
 
 const state = {
-  view:"home", query:"", docs:[], user:null, isAdmin:false, demoAdmin:false,
+  view:"home", query:"", docs:[], user:null, isAdmin:false, demoAdmin:false, profileSetupRequired:false,
   config:{...DEFAULT_LIMITS}, requests:[], editRequests:[], userProfiles:[], editorPermissions:{}, editorAccess:{canApproveEditRequests:false,canManageRestrictions:false}, reports:[], searches:{}, discussions:[], changes:[], chat:[], adminTab:"overview",
-  rankPeriod:"today", changeFilter:"all", discussionTab:"open", discussionId:null, specialTool:"stale", editorId:null, editingDraft:null, docId:null, results:[], searchSuggestions:[], searchSuggestionIndex:-1, firebase:null, firebaseReady:false, firebaseSetupPromise:null, gemini:null, aiSetupIssue:null, aiSetupErrorCode:null, searchUnsubscribe:null, chatSending:false,
+  rankPeriod:"today", changeFilter:"all", discussionTab:"open", discussionId:null, specialTool:"stale", editorId:null, editingDraft:null, docId:null, results:[], searchSuggestions:[], searchSuggestionIndex:-1, searchTracking:{query:"",docId:null}, searchSyncIssue:null, firebase:null, firebaseReady:false, firebaseSetupPromise:null, gemini:null, aiSetupIssue:null, aiSetupErrorCode:null, searchUnsubscribe:null, chatSending:false,
   toastTimer:null, pendingApproval:null, communityUnsubscribers:[], editorPermissionUnsubscribe:null, editRequestsUnsubscribe:null, adminRequestsUnsubscribe:null, adminProfilesUnsubscribe:null, adminPermissionsUnsubscribe:null
 };
 let recommendationTimer=null;
@@ -160,9 +160,9 @@ async function setupFirebase() {
     state.firebaseReady=true;watchCommunityCollections();
     const {collection,onSnapshot,query,where}=dbSdk;
     state.searchUnsubscribe=onSnapshot(query(collection(db,"searches"),where("day","==",todayKey())),snapshot=>{
-      const shared={};snapshot.docs.forEach(item=>{const data=item.data();if(data.term)shared[data.term.toLowerCase()]={count:data.count||0,updatedAt:data.updatedAt?.toMillis?.()||Date.now()};});
-      state.searches={...state.searches,...shared};saveLocal();if(["home","trends"].includes(state.view))render();
-    },err=>console.warn("검색어 랭킹 실시간 수신에 실패했습니다.",err));
+      const shared={};snapshot.docs.forEach(item=>{const data=item.data();if(data.term)shared[data.term.toLocaleLowerCase("ko-KR")]={term:data.term,count:data.count||0,day:data.day,updatedAt:data.updatedAt?.toMillis?.()||Date.now()};});
+      state.searches={...state.searches,...shared};state.searchSyncIssue=null;saveLocal();if(["home","trends"].includes(state.view))render();
+    },err=>{console.warn("검색어 랭킹 실시간 수신에 실패했습니다.",err);state.searchSyncIssue="Firebase에서 검색 랭킹을 불러오지 못했어요. Firestore 검색 규칙과 연결 상태를 확인해 주세요.";if(["home","trends"].includes(state.view))render();});
     authSdk.onAuthStateChanged(authSdk.getAuth(app),async user=>{
       if(user&&(!isAllowedLoginEmail(user.email)||!user.emailVerified)){
         await authSdk.signOut(auth).catch(()=>{});
@@ -170,6 +170,8 @@ async function setupFirebase() {
       }
       state.user=user || null;
       state.isAdmin=Boolean(user && user.emailVerified && user.email?.toLowerCase()===ADMIN_EMAIL);
+      state.profileSetupRequired=Boolean(user&&!state.isAdmin&&!studentProfileFromDisplayName(user.displayName));
+      if(state.profileSetupRequired)showStudentProfileModal("setup");
       await syncEditorAuthorization();
       await syncDocsFromCloud();
       updateAccountButton(); render();
@@ -356,7 +358,7 @@ async function cloudSetDiscussionStatus(topic) {
 function updateAccountButton() {
   const label=document.querySelector("#accountLabel"), avatar=document.querySelector("#avatarInitial"),logout=document.querySelector("#logoutButton");
   if(logout)logout.hidden=!(state.user||state.demoAdmin);
-  if(state.user){label.textContent=state.isAdmin?"관리자":"내 계정";const initial=state.user.displayName?.trim()?.slice(0,1);if(initial)avatar.textContent=initial;else avatar.innerHTML=icons.user;}
+  if(state.user){label.textContent=state.isAdmin?"관리자":"내 계정";const initial=studentProfileFromDisplayName(state.user.displayName)?.name.slice(0,1)||state.user.displayName?.trim()?.slice(0,1);if(initial)avatar.textContent=initial;else avatar.innerHTML=icons.user;}
   else if(state.demoAdmin){label.textContent="관리자 미리보기";avatar.textContent="관";}
   else {label.textContent="로그인";avatar.innerHTML=icons.user;}
 }
@@ -372,7 +374,10 @@ function modalOpen(html) {
   }
   modal.querySelector("button,input,textarea")?.focus({preventScroll:true});
 }
-function modalClose() { modalWrap.hidden=true; document.body.style.overflow=""; document.body.style.paddingRight=""; }
+function modalClose() {
+  if(state.profileSetupRequired){toast("계속 이용하려면 학번과 이름을 등록해 주세요. 로그아웃할 수 있어요.");return;}
+  modalWrap.hidden=true; document.body.style.overflow=""; document.body.style.paddingRight="";
+}
 function modalHeader(title,desc="") { return `<div class="modal-header"><div><h2 id="modalTitle">${esc(title)}</h2>${desc?`<p>${esc(desc)}</p>`:""}</div><button class="modal-close" type="button" data-action="close-modal" aria-label="닫기">×</button></div>`; }
 function navigationSnapshot() {
   return { seohyeonWiki:true, view:state.view, query:state.query, docId:state.docId, editorId:state.editorId, adminTab:state.adminTab, changeFilter:state.changeFilter, discussionTab:state.discussionTab, discussionId:state.discussionId, specialTool:state.specialTool };
@@ -652,7 +657,7 @@ function renderSearch() {
   const results=liveDocs().filter(doc=>!doc.sample).map(doc=>({doc,score:scoreSearchDocument(doc,query)})).filter(item=>item.score>0).sort((a,b)=>b.score-a.score||(b.doc.views||0)-(a.doc.views||0)||String(a.doc.title).localeCompare(String(b.doc.title),"ko"));
   const list=results.map(({doc})=>{
     const excerpt=String(doc.summary||doc.body||"").replace(/^\[[^\]]+\]\s*/gm,"").replace(/^#+\s*/gm,"").replace(/[\*_`]/g,"").replace(/\s+/g," ").trim().slice(0,220);
-    return `<button type="button" class="result-item" data-action="open-doc" data-id="${esc(doc.id)}"><div class="result-title">${esc(doc.title)}</div><div class="result-excerpt">${esc(excerpt)}</div><div class="result-tags"><span class="tag">${esc(doc.category||"문서")}</span><span class="tag">최근 수정 ${nowLabel(doc.updatedAt||Date.now())}</span></div></button>`;
+    return `<button type="button" class="result-item" data-action="open-doc" data-search-result-doc="true" data-id="${esc(doc.id)}"><div class="result-title">${esc(doc.title)}</div><div class="result-excerpt">${esc(excerpt)}</div><div class="result-tags"><span class="tag">${esc(doc.category||"문서")}</span><span class="tag">최근 수정 ${nowLabel(doc.updatedAt||Date.now())}</span></div></button>`;
   }).join("");
   return `<div class="content-page"><div class="page-title-row"><div><p class="eyebrow">Search</p><h1 class="page-title">검색 결과</h1><p class="page-subtitle">‘${esc(query)}’ 관련 문서 ${results.length}개를 찾았어요.</p></div></div><section class="panel search-results-panel"><div class="search-summary"><strong>${results.length}</strong>개의 관련 문서</div>${results.length?`<div class="result-list">${list}</div>`:`<div class="empty-state"><div class="empty-mark">${icons.search}</div><p class="empty-title">관련 문서를 찾지 못했어요</p><p class="empty-copy">다른 키워드로 다시 검색하거나, 띄어쓰기를 바꿔 보세요.</p><button class="button button-secondary" type="button" data-view="home">홈으로 돌아가기</button></div>`}</section></div>`;
 }
@@ -702,7 +707,8 @@ function getTrendList() {
 }
 function renderTrends() {
   const trends=getTrendList();
-  return `<div class="content-page"><div class="page-title-row"><div><p class="eyebrow">Trending searches</p><h1 class="page-title">실시간 검색어</h1><p class="page-subtitle">지금 서현위키에서 많이 찾는 검색어예요.</p></div><div class="period-switch"><button class="active">오늘</button><button disabled title="준비 중">이번 주</button><button disabled title="준비 중">전체</button></div></div><section class="panel"><div class="rank-head"><span>검색어 순위</span><span>최근 갱신 ${trends.length?nowLabel(Math.max(...trends.map(t=>t.updatedAt||Date.now()))):"—"}</span></div>${trends.length?`<div class="rank-list">${trends.slice(0,30).map((t,i)=>`<button class="rank-row" data-action="trend-search" data-term="${esc(t.term)}"><span class="rank-number">${String(i+1).padStart(2,"0")}</span><span class="rank-term">${esc(t.term)}</span><span class="rank-change ${t.deltaClass||"same"}">${t.delta||"—"}</span><span class="rank-count">${t.count||0}회 검색</span></button>`).join("")}</div>`:`<div class="empty-state"><div class="empty-mark">${icons.search}</div><p class="empty-title">아직 검색 데이터가 없어요</p><p class="empty-copy">사람들이 검색하기 시작하면 인기 검색어가 여기에 보여요.</p></div>`}</section><p class="rank-disclaimer">검색어는 이 브라우저에 저장되는 미리보기 데이터예요. Firebase 연결 후 실시간 공동 집계를 사용할 수 있습니다.</p></div>`;
+  const status=state.searchSyncIssue|| (state.firebase?"실제 문서 검색을 Firebase에서 실시간으로 집계합니다.":"미리보기 검색 기록은 이 브라우저에만 저장됩니다.");
+  return `<div class="content-page"><div class="page-title-row"><div><p class="eyebrow">Trending searches</p><h1 class="page-title">실시간 검색어</h1><p class="page-subtitle">지금 서현위키에서 많이 찾는 검색어예요.</p></div><div class="period-switch"><button class="active">오늘</button><button disabled title="준비 중">이번 주</button><button disabled title="준비 중">전체</button></div></div><section class="panel"><div class="rank-head"><span>검색어 순위</span><span>최근 갱신 ${trends.length?nowLabel(Math.max(...trends.map(t=>t.updatedAt||Date.now()))):"—"}</span></div>${trends.length?`<div class="rank-list">${trends.slice(0,30).map((t,i)=>`<button class="rank-row" data-action="trend-search" data-term="${esc(t.term)}"><span class="rank-number">${String(i+1).padStart(2,"0")}</span><span class="rank-term">${esc(t.term)}</span><span class="rank-change ${t.deltaClass||"same"}">${t.delta||"—"}</span><span class="rank-count">${t.count||0}회 검색</span></button>`).join("")}</div>`:`<div class="empty-state"><div class="empty-mark">${icons.search}</div><p class="empty-title">아직 검색 데이터가 없어요</p><p class="empty-copy">실제 문서를 검색하면 해당 문서 이름이 여기에 집계돼요.</p></div>`}</section><p class="rank-disclaimer">${esc(status)}</p></div>`;
 }
 function changeTime(change) { return change.updatedAt?.toMillis?.() || Number(change.updatedAt) || change.createdAt?.toMillis?.() || Number(change.createdAt) || Date.now(); }
 function communityNotice(kind="변경 내역") { return state.firebase?(state.user?`${kind} 공유에는 최신 Firestore 규칙 배포가 필요해요.`:`로그인 후 최신 Firestore 규칙을 배포하면 ${kind}을 다른 기기와 공유할 수 있어요. 지금은 이 브라우저에 저장됩니다.`):`Firebase 연결 전 미리보기라 ${kind}은 이 브라우저에 저장됩니다.`; }
@@ -942,6 +948,23 @@ function requestDocumentDelete(id) {
   if(!canDeleteDocuments(doc)) { toast("문서 작성자 또는 관리자만 삭제할 수 있어요.");return; }
   modalOpen(`${modalHeader("문서를 영구 삭제할까요?",doc.title)}<p class="modal-copy">문서와 첨부 링크가 사이트에서 삭제됩니다. 삭제 기록은 최근 변경 내역에 남습니다.</p><div class="modal-note">작성자는 본인 문서만 삭제할 수 있고 관리자는 모든 문서를 삭제할 수 있어요. 삭제를 되돌릴 수 없습니다.</div><div class="modal-actions"><button class="button button-secondary" data-action="close-modal">취소</button><button class="button button-danger" data-action="confirm-delete-doc" data-id="${esc(doc.id)}">영구 삭제</button></div>`);
 }
+function adminSearchToolbar(id,placeholder,total,label){
+  return `<div class="admin-doc-toolbar"><label class="admin-doc-search">${icons.search}<input type="search" data-admin-search="${id}" placeholder="${esc(placeholder)}" aria-label="${esc(label)}" autocomplete="off"></label><span id="${id}Count" class="admin-doc-count">${total}개</span></div>`;
+}
+function adminSearchNoResults(id){
+  return `<div id="${id}NoResults" class="admin-doc-no-results" hidden>검색 결과가 없어요. 검색어를 바꿔 보세요.</div>`;
+}
+function filterAdminListRows(searchId){
+  const input=document.querySelector(`[data-admin-search="${searchId}"]`);
+  const query=normalizeSearchText(input?.value||"");
+  const rows=[...document.querySelectorAll("[data-admin-search-row]")].filter(row=>row.dataset.adminSearchRow===searchId);
+  let visible=0;
+  rows.forEach(row=>{row.hidden=Boolean(query&&!row.dataset.search.includes(query));if(!row.hidden)visible++;});
+  const count=document.getElementById(`${searchId}Count`);
+  if(count)count.textContent=query?`${visible} / ${rows.length}개`:`${rows.length}개`;
+  const noResults=document.getElementById(`${searchId}NoResults`);
+  if(noResults)noResults.hidden=!query||visible>0||rows.length===0;
+}
 async function deleteDocumentPermanently(id) {
   const doc=state.docs.find(item=>item.id===id);
   if(!doc)return;
@@ -992,10 +1015,45 @@ function renderAdmin() {
     }).join("");
     body=`<section class="panel admin-doc-panel"><div class="admin-doc-toolbar"><label class="admin-doc-search">${icons.search}<input id="adminDocSearch" type="search" placeholder="문서명, 분류, 작성자 검색" aria-label="문서 검색"></label><label class="admin-doc-filter"><span class="sr-only">문서 상태 필터</span><select id="adminDocFilter"><option value="all">모든 문서</option><option value="published">공개 문서</option><option value="hidden">숨김 문서</option><option value="restricted">편집 제한 문서</option></select></label><span id="adminDocCount" class="admin-doc-count">${managedDocs.length}개 문서</span></div><div class="admin-doc-list">${rows||`<div class="empty-state admin-list-empty"><p class="empty-title">등록된 문서가 없어요</p><p class="empty-copy">새 문서를 작성하면 이곳에서 관리할 수 있습니다.</p></div>`}<div id="adminDocsNoResults" class="admin-doc-no-results" hidden>조건에 맞는 문서가 없습니다. 검색어나 필터를 바꿔 보세요.</div></div></section>`;
   }
-  if(state.adminTab==="requests"&&fullAccess) body=`<section class="panel admin-list-panel">${state.requests.length?state.requests.map(r=>`<article class="request-row"><div class="request-copy"><div class="request-title">${esc(r.title||"제목 없는 문서")}</div><div class="request-detail">${esc(r.reason||"새 문서 공개 승인 요청")}<br>요청: ${esc(r.author||"이용자")} · 글자 ${Number(r.chars||0).toLocaleString()} / 사진 ${r.images||r.mediaImages?.length||0} / 동영상 ${r.videos||r.mediaVideos?.length||0} · ${r.status==="pending"?"승인 대기":r.status==="approved"?"승인됨":"거절됨"}</div></div><div class="request-actions">${r.status==="pending"?`<button class="button button-primary" data-action="approve-request" data-id="${esc(r.id)}">승인</button><button class="button button-secondary" data-action="reject-request" data-id="${esc(r.id)}">거절</button>`:`<button class="button button-secondary" data-action="view-request" data-id="${esc(r.id)}">요청 보기</button>`}</div></article>`).join(""):`<div class="empty-state"><div class="empty-mark">${icons.shield}</div><p class="empty-title">대기 중인 승인 요청이 없어요</p><p class="empty-copy">새 문서와 작성 제한 초과 요청이 이곳에 표시됩니다.</p></div>`}</section>`;
-  if(state.adminTab==="editRequests") body=`<section class="panel admin-list-panel">${pendingEdits?state.editRequests.filter(r=>r.status==="pending").map(r=>`<article class="request-row"><div class="request-copy"><div class="request-title">${esc(r.title||"제목 없는 문서")}</div><div class="request-detail">대상 문서: ${esc(state.docs.find(d=>d.id===r.docId)?.title||r.docId)}<br>요청자: ${esc(r.author||"이용자")} · ${nowLabel(r.createdAt?.toMillis?.()||r.createdAt||Date.now())}<br>글자 ${Number(r.chars||0).toLocaleString()} / 사진 ${r.imageCount||0} / 동영상 ${r.videoCount||0}</div><details class="proposal-preview"><summary>제안 내용 보기</summary><div class="article-body">${markdownHtml(r.body||"")}</div></details></div><div class="request-actions"><button class="button button-primary" data-action="approve-edit-proposal" data-id="${esc(r.id)}">승인하고 반영</button><button class="button button-secondary" data-action="reject-edit-proposal" data-id="${esc(r.id)}">거절</button></div></article>`).join(""):`<div class="empty-state"><div class="empty-mark">${icons.doc}</div><p class="empty-title">검토할 편집 제안이 없어요</p><p class="empty-copy">제한된 문서의 수정 제안이 여기에 표시됩니다.</p></div>`}</section>`;
-  if(state.adminTab==="permissions"&&fullAccess) body=`<section class="panel admin-list-panel"><div class="admin-list-intro"><strong>편집 권한을 관리해요</strong><p>권한을 받은 이용자는 제한 문서의 편집 제안을 검토할 수 있습니다. 권한은 언제든 회수할 수 있어요.</p></div>${state.userProfiles.filter(profile=>profile.email?.toLowerCase()!==ADMIN_EMAIL).length?state.userProfiles.filter(profile=>profile.email?.toLowerCase()!==ADMIN_EMAIL).map(profile=>{const granted=state.editorPermissions[profile.id]?.canApproveEditRequests===true;return `<article class="request-row"><div class="request-copy"><div class="request-title">${esc(profile.displayName||"이름 없음")}</div><div class="request-detail">${esc(profile.email||profile.id)} · ${granted?"편집 제안 검토 가능":"일반 이용자"}</div></div><div class="request-actions"><button class="button ${granted?"button-secondary":"button-primary"}" data-action="set-editor-permission" data-uid="${esc(profile.id)}" data-granted="${granted?"false":"true"}">${granted?"권한 회수":"권한 부여"}</button></div></article>`;}).join(""):`<div class="empty-state"><p class="empty-title">아직 로그인한 학교 계정이 없어요</p><p class="empty-copy">학교 계정으로 로그인한 이용자가 이 목록에 표시됩니다.</p></div>`}</section>`;
-  if(state.adminTab==="reports"&&fullAccess) body=`<section class="panel admin-list-panel">${state.reports.length?state.reports.map(r=>`<article class="request-row"><div class="request-copy"><div class="request-title">${esc(getDoc(r.docId)?.title||"삭제되었거나 숨긴 문서")}</div><div class="request-detail">${esc(r.reason||"신고 사유 없음")}<br>접수 ${nowLabel(r.createdAt?.toMillis?.()||r.createdAt||Date.now())} · ${r.status==="reviewed"?"검토 완료":"검토 대기"}</div></div><div class="request-actions">${r.status!=="reviewed"?`<button class="button button-primary" data-action="review-report" data-id="${esc(r.id)}">검토 완료</button>`:""}<button class="button button-secondary" data-action="open-doc" data-id="${esc(r.docId)}">문서 보기</button></div></article>`).join(""):`<div class="empty-state"><div class="empty-mark">${icons.shield}</div><p class="empty-title">접수된 신고가 없어요</p><p class="empty-copy">문서 신고가 접수되면 여기서 검토할 수 있습니다.</p></div>`}</section>`;
+  if(state.adminTab==="requests"&&fullAccess){
+    const rows=state.requests.map(r=>{
+      const status=r.status==="pending"?"승인 대기":r.status==="approved"?"승인됨":"거절됨";
+      const searchable=normalizeSearchText([r.title,r.author,r.authorEmail,r.authorUid,r.ownerUid,r.uid,r.reason,r.status,status,r.body].filter(Boolean).join(" "));
+      return `<article class="request-row" data-admin-search-row="adminRequestSearch" data-search="${esc(searchable)}"><div class="request-copy"><div class="request-title">${esc(r.title||"제목 없는 문서")}</div><div class="request-detail">${esc(r.reason||"새 문서 공개 승인 요청")}<br>요청: ${esc(r.author||"이용자")} · 글자 ${Number(r.chars||0).toLocaleString()} / 사진 ${r.images||r.mediaImages?.length||0} / 동영상 ${r.videos||r.mediaVideos?.length||0} · ${status}</div></div><div class="request-actions">${r.status==="pending"?`<button class="button button-primary" data-action="approve-request" data-id="${esc(r.id)}">승인</button><button class="button button-secondary" data-action="reject-request" data-id="${esc(r.id)}">거절</button>`:`<button class="button button-secondary" data-action="view-request" data-id="${esc(r.id)}">요청 보기</button>`}</div></article>`;
+    }).join("");
+    const empty=`<div class="empty-state"><div class="empty-mark">${icons.shield}</div><p class="empty-title">대기 중인 승인 요청이 없어요</p><p class="empty-copy">새 문서와 작성 제한 초과 요청이 이곳에 표시됩니다.</p></div>`;
+    body=`<section class="panel admin-list-panel">${adminSearchToolbar("adminRequestSearch","문서명, 작성자, 요청 내용 검색",state.requests.length,"승인 요청 검색")}${rows||empty}${adminSearchNoResults("adminRequestSearch")}</section>`;
+  }
+  if(state.adminTab==="editRequests"){
+    const proposals=state.editRequests.filter(r=>r.status==="pending");
+    const rows=proposals.map(r=>{
+      const docTitle=state.docs.find(d=>d.id===r.docId)?.title||r.docId;
+      const searchable=normalizeSearchText([r.title,docTitle,r.author,r.authorEmail,r.authorUid,r.ownerUid,r.body].filter(Boolean).join(" "));
+      return `<article class="request-row" data-admin-search-row="adminEditSearch" data-search="${esc(searchable)}"><div class="request-copy"><div class="request-title">${esc(r.title||"제목 없는 문서")}</div><div class="request-detail">대상 문서: ${esc(docTitle)}<br>요청자: ${esc(r.author||"이용자")} · ${nowLabel(r.createdAt?.toMillis?.()||r.createdAt||Date.now())}<br>글자 ${Number(r.chars||0).toLocaleString()} / 사진 ${r.imageCount||0} / 동영상 ${r.videoCount||0}</div><details class="proposal-preview"><summary>제안 내용 보기</summary><div class="article-body">${markdownHtml(r.body||"")}</div></details></div><div class="request-actions"><button class="button button-primary" data-action="approve-edit-proposal" data-id="${esc(r.id)}">승인하고 반영</button><button class="button button-secondary" data-action="reject-edit-proposal" data-id="${esc(r.id)}">거절</button></div></article>`;
+    }).join("");
+    const empty=`<div class="empty-state"><div class="empty-mark">${icons.doc}</div><p class="empty-title">검토할 편집 제안이 없어요</p><p class="empty-copy">제한된 문서의 수정 제안이 여기에 표시됩니다.</p></div>`;
+    body=`<section class="panel admin-list-panel">${adminSearchToolbar("adminEditSearch","문서명, 요청자, 제안 내용 검색",proposals.length,"편집 제안 검색")}${rows||empty}${adminSearchNoResults("adminEditSearch")}</section>`;
+  }
+  if(state.adminTab==="permissions"&&fullAccess){
+    const profiles=state.userProfiles.filter(profile=>profile.email?.toLowerCase()!==ADMIN_EMAIL);
+    const rows=profiles.map(profile=>{
+      const granted=state.editorPermissions[profile.id]?.canApproveEditRequests===true;
+      const searchable=normalizeSearchText([profile.displayName,profile.email,profile.id,profile.studentNumber].filter(Boolean).join(" "));
+      return `<article class="request-row" data-admin-search-row="adminPermissionSearch" data-search="${esc(searchable)}"><div class="request-copy"><div class="request-title">${esc(profile.displayName||"이름 없음")}</div><div class="request-detail">${esc(profile.email||profile.id)} · ${granted?"편집 제안 검토 가능":"일반 이용자"}</div></div><div class="request-actions"><button class="button ${granted?"button-secondary":"button-primary"}" data-action="set-editor-permission" data-uid="${esc(profile.id)}" data-granted="${granted?"false":"true"}">${granted?"권한 회수":"권한 부여"}</button></div></article>`;
+    }).join("");
+    const empty=`<div class="empty-state"><p class="empty-title">아직 로그인한 학교 계정이 없어요</p><p class="empty-copy">학교 계정으로 로그인한 이용자가 이 목록에 표시됩니다.</p></div>`;
+    body=`<section class="panel admin-list-panel"><div class="admin-list-intro"><strong>편집 권한을 관리해요</strong><p>권한을 받은 이용자는 제한 문서의 편집 제안을 검토할 수 있습니다. 권한은 언제든 회수할 수 있어요.</p></div>${adminSearchToolbar("adminPermissionSearch","이름, 학번, 이메일 검색",profiles.length,"이용자 검색")}${rows||empty}${adminSearchNoResults("adminPermissionSearch")}</section>`;
+  }
+  if(state.adminTab==="reports"&&fullAccess){
+    const rows=state.reports.map(r=>{
+      const docTitle=getDoc(r.docId)?.title||"삭제되었거나 숨긴 문서";
+      const status=r.status==="reviewed"?"검토 완료":"검토 대기";
+      const searchable=normalizeSearchText([docTitle,r.reason,r.reporter,r.reporterName,r.reporterEmail,r.status,status].filter(Boolean).join(" "));
+      return `<article class="request-row" data-admin-search-row="adminReportSearch" data-search="${esc(searchable)}"><div class="request-copy"><div class="request-title">${esc(docTitle)}</div><div class="request-detail">${esc(r.reason||"신고 사유 없음")}<br>접수 ${nowLabel(r.createdAt?.toMillis?.()||r.createdAt||Date.now())} · ${status}</div></div><div class="request-actions">${r.status!=="reviewed"?`<button class="button button-primary" data-action="review-report" data-id="${esc(r.id)}">검토 완료</button>`:""}<button class="button button-secondary" data-action="open-doc" data-id="${esc(r.docId)}">문서 보기</button></div></article>`;
+    }).join("");
+    const empty=`<div class="empty-state"><div class="empty-mark">${icons.shield}</div><p class="empty-title">접수된 신고가 없어요</p><p class="empty-copy">문서 신고가 접수되면 여기서 검토할 수 있습니다.</p></div>`;
+    body=`<section class="panel admin-list-panel">${adminSearchToolbar("adminReportSearch","문서명, 신고 사유 검색",state.reports.length,"신고 검색")}${rows||empty}${adminSearchNoResults("adminReportSearch")}</section>`;
+  }
   if(state.adminTab==="settings"&&fullAccess) body=`<div class="settings-grid"><section class="panel settings-card"><h3>문서 작성 제한</h3><p class="admin-settings-help">저장 공간과 검토 부담을 고려해 문서별 최대 작성량을 정합니다.</p><label class="setting-inline"><span>문서 최대 글자 수</span><input type="number" min="500" max="50000" step="500" data-setting="chars" value="${state.config.chars}"></label><label class="setting-inline"><span>사진 링크 최대 수</span><input type="number" min="0" max="20" data-setting="images" value="${state.config.images}"></label><label class="setting-inline"><span>동영상 링크 최대 수</span><input type="number" min="0" max="10" data-setting="videos" value="${state.config.videos}"></label><button class="button button-primary" style="margin-top:14px" data-action="save-limits">제한 저장</button><p class="admin-settings-note">제한을 변경하면 Firestore 보안 규칙도 같은 기준으로 맞춰야 합니다.</p></section><section class="panel settings-card"><h3>편집과 승인 안내</h3><p class="admin-settings-help">새 문서는 관리자 승인 후 공개됩니다. 일반 문서는 작성자와 관계없이 학교 계정 누구나 편집해 즉시 저장할 수 있고, 편집 제한 문서와 작성량 초과 편집은 승인 후 반영됩니다.</p></section></div>`;
   const title=fullAccess?"관리자 센터":"편집 제안 검토";
   return `<div class="content-page admin-page"><div class="page-title-row"><div class="admin-title-copy"><p class="eyebrow">${fullAccess?"Admin workspace":"Editor workspace"}</p><h1 class="page-title">${title}</h1><p class="page-subtitle">${fullAccess?"문서와 이용자, 검토 요청을 한곳에서 관리합니다.":"권한 있는 이용자만 편집 제안을 검토할 수 있어요."}${state.demoAdmin?" · 로컬 미리보기":""}</p><button class="button button-secondary admin-return-button" data-action="admin-exit">사이트로 돌아가기</button></div></div><nav class="admin-tabs" aria-label="관리자 메뉴">${tabs.map(([id,label,count])=>`<button class="${state.adminTab===id?"active":""}" data-action="admin-tab" data-tab="${id}">${label}${count?`<span class="admin-tab-count">${count}</span>`:""}</button>`).join("")}</nav>${body}</div>`;
@@ -1041,15 +1099,35 @@ function addDiscussionReply(form) {
   item.comments=item.comments||[];const comment={id:`comment-${Date.now()}-${Math.random().toString(36).slice(2,6)}`,discussionId:item.id,body,author:state.user?.displayName||"이용자",authorUid:state.user?.uid||null,createdAt:Date.now()};item.comments.push(comment);item.comments=item.comments.slice(-20);item.updatedAt=Date.now();saveLocal();cloudWriteDiscussionComment(item,comment);render();
 }
 
+function countDocumentSearch(doc) {
+  if(!doc)return;
+  const key=doc.title.toLocaleLowerCase("ko-KR"),old=state.searches[key];
+  const count=old?.day===todayKey()?(typeof old==="number"?old:(old?.count||0)):0;
+  state.searches[key]={term:doc.title,count:count+1,day:todayKey(),updatedAt:Date.now()};saveLocal();
+  if(state.firebase)trackCloudSearch(doc.title).then(()=>{
+    state.searchSyncIssue=null;
+    if(state.view==="trends")render();
+  }).catch(error=>{
+    console.warn("Firebase 검색 랭킹 기록 실패:",error);
+    state.searchSyncIssue="검색 기록을 Firebase에 저장하지 못했어요. Firestore 검색 규칙과 연결 상태를 확인해 주세요.";
+    if(state.view==="trends")render();
+  });
+}
+function recordSearchSelection(doc,query) {
+  if(!doc)return;
+  const queryKey=normalizeSearchText(query).replace(/\s+/g,"");
+  const previous=state.searchTracking;
+  const alreadyCounted=Boolean(queryKey&&previous?.query===queryKey&&previous.docId===doc.id);
+  state.searchTracking={query:"",docId:null};
+  if(!alreadyCounted)countDocumentSearch(doc);
+}
 function recordSearch(query) {
   const value=String(query||"").trim();if(!value)return "";
   clearTimeout(searchSuggestionHideTimer);searchSuggestionHideTimer=null;
   state.query=value;
   const doc=findSearchDocumentForRanking(value);
-  if(!doc)return value;
-  const key=doc.title.toLocaleLowerCase("ko-KR"),old=state.searches[key],count=old?.day===todayKey()?(typeof old==="number"?old:(old?.count||0)):0;
-  state.searches[key]={term:doc.title,count:count+1,day:todayKey(),updatedAt:Date.now()};saveLocal();
-  if(state.firebase)trackCloudSearch(doc.title).catch(()=>{});
+  state.searchTracking={query:normalizeSearchText(value).replace(/\s+/g,""),docId:doc?.id||null};
+  if(doc)countDocumentSearch(doc);
   return value;
 }
 function beginSearch(query) {
@@ -1168,14 +1246,20 @@ async function reviewReport(id) {
   saveLocal();render();toast("신고를 검토 완료로 표시했어요.");
 }
 function showLoginModal() {
+  if(state.profileSetupRequired){showStudentProfileModal("setup");return;}
   if(state.user||state.demoAdmin){
     const workspaceButton=canOpenAdminWorkspace()?`<button class="button button-secondary" style="width:100%;margin:0 0 12px" data-action="open-admin">${getAdminAccess()?"관리자 센터 열기":"편집 제안 검토"}</button>`:"";
-    modalOpen(`${modalHeader("내 계정", "서현위키 계정 정보를 확인합니다.")}<div class="auth-user"><span class="avatar">${esc(state.user?.displayName?.slice(0,1)||"관")}</span><div><strong>${esc(state.user?.displayName||"관리자 미리보기")}</strong><small>${esc(state.user?.email||"로컬 데모 계정")}</small></div></div>${state.user?`<button class="button button-primary" style="width:100%;margin:0 0 12px" data-action="new-doc">문서 작성</button>`:""}${workspaceButton}<div class="modal-actions"><button class="button button-secondary" data-action="sign-out">로그아웃</button><button class="button button-secondary" data-action="close-modal">닫기</button></div>`);return;
+    const profile=studentProfileFromDisplayName(state.user?.displayName);
+    modalOpen(`${modalHeader("내 계정", "서현위키 계정 정보를 확인합니다.")}<div class="auth-user"><span class="avatar">${esc(profile?.name.slice(0,1)||state.user?.displayName?.slice(0,1)||"관")}</span><div><strong>${esc(state.user?.displayName||"관리자 미리보기")}</strong><small>${esc(state.user?.email||"로컬 데모 계정")}</small></div></div>${profile?`<button class="button button-secondary" style="width:100%;margin:0 0 12px" data-action="change-profile-name">이름 변경</button>`:""}${state.user?`<button class="button button-primary" style="width:100%;margin:0 0 12px" data-action="new-doc">문서 작성</button>`:""}${workspaceButton}<div class="modal-actions"><button class="button button-secondary" data-action="sign-out">로그아웃</button><button class="button button-secondary" data-action="close-modal">닫기</button></div>`);return;
   }
-  modalOpen(`${modalHeader("서현위키 로그인", "학교 Google 계정의 학번과 이름을 입력해 주세요.")}<div class="auth-options">${isFirebaseConfigured?`<form id="loginProfileForm" class="login-profile-form"><div class="field"><label for="loginStudentNumber">학번</label><input id="loginStudentNumber" name="studentNumber" inputmode="numeric" autocomplete="off" maxlength="5" pattern="[0-9]{5}" placeholder="숫자 5자리"></div><div class="field"><label for="loginStudentName">이름</label><input id="loginStudentName" name="studentName" autocomplete="name" maxlength="24" pattern="[가-힣]+" placeholder="한글 이름만 입력해 주세요"></div><div class="profile-visibility-note">서현고 학교 계정(<strong>25-숫자@seohyun.hs.kr</strong>)으로 로그인해 주세요. 여기에 입력한 학번은 계정 이메일의 숫자와 달라도 됩니다. 학번과 이름은 작성자 닉네임으로 표시됩니다. 관리자 계정은 두 항목을 비워도 로그인할 수 있어요.</div><label class="check-row profile-consent"><input type="checkbox" name="publicProfileConsent"><span>학번과 이름이 작성자 닉네임으로 공개되는 것을 확인했습니다.</span></label><button class="auth-google-button" type="submit"><span class="auth-google-mark" aria-hidden="true">G</span><span>Google 계정으로 로그인</span></button></form>`:`<div class="modal-note auth-config-note">지금은 로컬 미리보기입니다. Firebase 설정 후 Google 로그인이 활성화됩니다.</div>`}</div>`);
+  modalOpen(`${modalHeader("서현위키 로그인", "Google 학교 계정으로 로그인해 주세요.")}<div class="auth-options">${isFirebaseConfigured?`<form id="loginProfileForm" class="login-profile-form"><div class="profile-visibility-note">처음 로그인한 계정은 Google 인증 후 학번과 이름을 한 번 등록합니다. 이후에는 다시 입력할 필요가 없고, 계정 메뉴에서 이름을 바꿀 수 있어요. 학번과 이름은 작성자 닉네임으로 공개됩니다.</div><button class="auth-google-button" type="submit"><span class="auth-google-mark" aria-hidden="true">G</span><span>Google 계정으로 로그인</span></button></form>`:`<div class="modal-note auth-config-note">지금은 로컬 미리보기입니다. Firebase 설정 후 Google 로그인이 활성화됩니다.</div>`}</div>`);
 }
 function normalizeProfileText(value="") {
   return String(value).normalize("NFKC").toLocaleLowerCase("ko-KR").replace(/[\s\p{P}\p{S}\p{Cf}]+/gu,"");
+}
+function studentProfileFromDisplayName(displayName="") {
+  const match=String(displayName).trim().match(/^(\d{5})\s+([가-힣]{1,24})$/);
+  return match?{studentNumber:match[1],name:match[2]}:null;
 }
 function hasBlockedProfileTerm(name) {
   const normalized=normalizeProfileText(name);
@@ -1188,51 +1272,79 @@ function rejectProfileInput(input,message) {
   toast(message);
   input.addEventListener("input",()=>input.setCustomValidity(""),{once:true});
 }
+function showStudentProfileModal(mode="setup") {
+  if(mode==="setup"&&modal.querySelector("#studentProfileForm"))return;
+  const editing=mode==="name",profile=studentProfileFromDisplayName(state.user?.displayName);
+  if(editing&&!profile){toast("저장된 학번과 이름을 찾지 못했어요. 다시 로그인해 주세요.");return;}
+  const setupDescription="다른 이용자에게 공개될 작성자 이름을 등록합니다.";
+  const form=editing
+    ?`<div class="profile-fixed-number"><span>학번</span><strong>${esc(profile.studentNumber)}</strong><small>학번은 변경되지 않아요.</small></div><div class="field"><label for="profileName">이름</label><input id="profileName" name="studentName" value="${esc(profile.name)}" autocomplete="name" maxlength="24" pattern="[가-힣]+" required placeholder="한글 이름만 입력해 주세요"></div><div class="profile-visibility-note">학번과 이름이 함께 작성자 닉네임으로 표시됩니다.</div><div class="modal-actions"><button type="button" class="button button-secondary" data-action="close-modal">취소</button><button type="submit" class="button button-primary">이름 저장</button></div>`
+    :`<div class="field"><label for="profileStudentNumber">학번</label><input id="profileStudentNumber" name="studentNumber" inputmode="numeric" autocomplete="off" maxlength="5" pattern="[0-9]{5}" required placeholder="숫자 5자리"></div><div class="field"><label for="profileName">이름</label><input id="profileName" name="studentName" autocomplete="name" maxlength="24" pattern="[가-힣]+" required placeholder="한글 이름만 입력해 주세요"></div><div class="profile-visibility-note">학번과 이름이 모두 작성자 닉네임으로 공개됩니다. 학번은 학교 계정 이메일 숫자와 달라도 됩니다.</div><label class="check-row profile-consent"><input type="checkbox" name="publicProfileConsent" required><span>학번과 이름이 공개되는 것에 동의합니다.</span></label><div class="modal-actions"><button type="button" class="button button-secondary" data-action="sign-out">로그아웃</button><button type="submit" class="button button-primary">등록하고 계속</button></div>`;
+  modalOpen(`${modalHeader(editing?"이름 변경":"학번과 이름 등록",editing?"공개되는 이름을 수정합니다.":setupDescription)}<form id="studentProfileForm" data-mode="${mode}" class="login-profile-form">${form}</form>`);
+}
+async function saveStudentProfile(form) {
+  const user=state.firebase?.auth.currentUser;
+  if(!user){toast("다시 로그인한 뒤 시도해 주세요.");return;}
+  const editing=form.dataset.mode==="name",existing=studentProfileFromDisplayName(user.displayName);
+  const studentNumber=editing?existing?.studentNumber:String(new FormData(form).get("studentNumber")||"").trim();
+  const studentName=String(new FormData(form).get("studentName")||"").trim().replace(/\s+/g," ");
+  const numberInput=form.querySelector("#profileStudentNumber"),nameInput=form.querySelector("#profileName");
+  if(!editing&&!/^\d{5}$/.test(studentNumber)){rejectProfileInput(numberInput,"학번은 숫자 5자리로 입력해 주세요.");return;}
+  if(hasBlockedProfileTerm(studentName)){rejectProfileInput(nameInput,"비속어·성적 표현, 도박·사행성 표현, 부적절한 사이트 이름은 사용할 수 없어요.");return;}
+  if(!/^[가-힣]{1,24}$/.test(studentName)){rejectProfileInput(nameInput,"이름은 한글만 입력해 주세요.");return;}
+  if(!editing&&new FormData(form).get("publicProfileConsent")!=="on"){toast("학번과 이름 공개 안내에 동의해 주세요.");return;}
+  const submit=form.querySelector('button[type="submit"]');
+  if(submit){submit.disabled=true;submit.textContent=editing?"저장 중…":"등록 중…";}
+  try{
+    const {updateProfile,reload}=state.firebase.authSdk;
+    await updateProfile(user,{displayName:`${studentNumber} ${studentName}`});
+    await reload(user);
+    state.user=state.firebase.auth.currentUser||user;
+    state.profileSetupRequired=false;
+    try{await cloudSaveUserProfile(state.user);}catch(error){console.warn("닉네임 프로필 저장에 실패했습니다.",error);}
+    await syncEditorAuthorization();
+    updateAccountButton();modalClose();render();toast(editing?"이름을 변경했어요.":"학번과 이름을 저장했어요.");
+  }catch(error){
+    console.error("학번·이름 저장 실패:",error);
+    toast("정보를 저장하지 못했어요. 다시 시도해 주세요.");
+    if(submit&&form.isConnected){submit.disabled=false;submit.textContent=editing?"이름 저장":"등록하고 계속";}
+  }
+}
 async function googleLogin(form) {
   if(!state.firebase){toast("Firebase 설정을 먼저 완료해 주세요.");return;}
-  const data=new FormData(form),studentNumber=String(data.get("studentNumber")||"").trim(),studentName=String(data.get("studentName")||"").trim().replace(/\s+/g," ");
-  const studentNumberInput=form.querySelector("#loginStudentNumber"),studentNameInput=form.querySelector("#loginStudentName");
-  if(studentName&&hasBlockedProfileTerm(studentName)){rejectProfileInput(studentNameInput,"비속어·성적 표현, 도박·사행성 표현, 부적절한 사이트 이름은 사용할 수 없어요.");return;}
-  if(studentName&&!/^[가-힣]{1,24}$/.test(studentName)){rejectProfileInput(studentNameInput,"이름은 한글만 입력해 주세요.");return;}
-  const profileStarted=Boolean(studentNumber||studentName||data.get("publicProfileConsent")==="on");
-  if(profileStarted){
-    if(!/^\d{5}$/.test(studentNumber)){rejectProfileInput(studentNumberInput,"학번은 숫자 5자리로 입력해 주세요.");return;}
-    if(!studentName){rejectProfileInput(studentNameInput,"이름을 한글로 입력해 주세요.");return;}
-    if(data.get("publicProfileConsent")!=="on"){toast("학번과 이름 공개 안내에 동의해 주세요.");form.querySelector('input[name="publicProfileConsent"]')?.focus();return;}
-  }
   const submit=form.querySelector('button[type="submit"]');
   if(submit){submit.disabled=true;submit.querySelector("span:last-child").textContent="로그인 중…";}
   let signedInUser=null,failureMessage="Google 로그인을 완료하지 못했어요. 다시 시도해 주세요.";
   try {
-    const {GoogleAuthProvider,signInWithPopup,updateProfile,reload}=state.firebase.authSdk;
+    const {GoogleAuthProvider,signInWithPopup,reload}=state.firebase.authSdk;
     const provider=new GoogleAuthProvider();provider.setCustomParameters({prompt:"select_account"});
     const credential=await signInWithPopup(state.firebase.auth,provider);signedInUser=credential.user;
     const email=String(signedInUser.email||"").trim().toLowerCase();
     if(!signedInUser.emailVerified){failureMessage="Google에서 이메일을 인증한 뒤 다시 로그인해 주세요.";throw new Error("unverified-email");}
     if(email!==ADMIN_EMAIL){
       if(!SCHOOL_EMAIL_PATTERN.test(email)){failureMessage="25-숫자@seohyun.hs.kr 형식의 서현고 학교 계정으로 로그인해 주세요.";throw new Error("school-account-required");}
-      if(!/^\d{5}$/.test(studentNumber)){failureMessage="학번은 숫자 5자리로 입력해 주세요.";throw new Error("invalid-student-number");}
-      if(hasBlockedProfileTerm(studentName)){failureMessage="비속어·성적 표현, 도박·사행성 표현, 부적절한 사이트 이름은 닉네임으로 사용할 수 없어요.";throw new Error("blocked-profile-name");}
-      if(!/^[가-힣]{1,24}$/.test(studentName)){failureMessage="이름은 한글만 입력해 주세요.";throw new Error("invalid-student-name");}
-      if(data.get("publicProfileConsent")!=="on"){failureMessage="학번과 이름이 닉네임으로 공개되는 안내에 동의해 주세요.";throw new Error("profile-consent-required");}
-      await updateProfile(signedInUser,{displayName:`${studentNumber} ${studentName}`});
     }
     await reload(signedInUser);state.user=state.firebase.auth.currentUser||signedInUser;
-    try{await cloudSaveUserProfile(state.user);}catch(profileError){console.warn("닉네임 프로필 저장에 실패했습니다.",profileError);}
-    state.isAdmin=Boolean(state.user?.emailVerified&&state.user.email?.toLowerCase()===ADMIN_EMAIL);state.demoAdmin=false;
-    await syncEditorAuthorization();
-    updateAccountButton();modalClose();render();toast("로그인했어요.");
   }
   catch(err){
     console.error(err);
-    if(signedInUser){await state.firebase.authSdk.signOut(state.firebase.auth).catch(()=>{});state.user=null;state.isAdmin=false;}
+    if(signedInUser){await state.firebase.authSdk.signOut(state.firebase.auth).catch(()=>{});state.user=null;state.isAdmin=false;state.profileSetupRequired=false;}
     toast(failureMessage);
     if(submit&&form.isConnected){submit.disabled=false;submit.querySelector("span:last-child").textContent="Google 계정으로 로그인";}
+    return;
   }
+  state.isAdmin=Boolean(state.user?.emailVerified&&state.user.email?.toLowerCase()===ADMIN_EMAIL);state.demoAdmin=false;
+  if(state.isAdmin||studentProfileFromDisplayName(state.user?.displayName)){
+    state.profileSetupRequired=false;
+    try{await cloudSaveUserProfile(state.user);}catch(profileError){console.warn("닉네임 프로필 저장에 실패했습니다.",profileError);}
+    await syncEditorAuthorization();updateAccountButton();modalClose();render();toast("로그인했어요.");
+    return;
+  }
+  state.profileSetupRequired=true;updateAccountButton();showStudentProfileModal("setup");toast("처음 로그인한 계정이에요. 학번과 이름을 등록해 주세요.");
 }
 async function signOut() {
   if(state.firebase&&state.user)await state.firebase.authSdk.signOut(state.firebase.auth);
-  state.user=null;state.isAdmin=false;state.demoAdmin=false;state.editorAccess={canApproveEditRequests:false,canManageRestrictions:false};modalClose();navigate("home");toast("로그아웃했어요.");
+  state.user=null;state.isAdmin=false;state.demoAdmin=false;state.profileSetupRequired=false;state.editorAccess={canApproveEditRequests:false,canManageRestrictions:false};modalClose();navigate("home");toast("로그아웃했어요.");
 }
 function openSettings() {
   const preferences=getPreferences();
@@ -1262,6 +1374,7 @@ function openRandomDocument(){
 // Delegated interactions keep the single-page views simple and consistent.
 document.addEventListener("submit",event=>{
   if(event.target.id==="loginProfileForm"){event.preventDefault();googleLogin(event.target);}
+  if(event.target.id==="studentProfileForm"){event.preventDefault();saveStudentProfile(event.target);}
   if(event.target.id==="heroSearchForm"){event.preventDefault();beginSearch(document.querySelector("#heroSearchInput").value);}
   if(event.target.id==="editorForm"){event.preventDefault();saveEditor(event.target);}
   if(event.target.id==="chatForm"){event.preventDefault();sendChat();}
@@ -1281,12 +1394,13 @@ document.addEventListener("click",async event=>{
   switch(action){
     case "close-modal":modalClose();break;
     case "account":modalClose();showLoginModal();break;
+    case "change-profile-name":showStudentProfileModal("name");break;
     case "open-ai":navigate("ai");break;
     case "open-recommendations":navigate("recommendations");break;
     case "open-trends":navigate("trends");break;
     case "open-settings":openSettings();break;
     case "random-doc":openRandomDocument();break;
-    case "open-doc":state.docId=id;refreshArticleViews(id);navigate("article");break;
+    case "open-doc":{const doc=getDoc(id);if(target.dataset.searchResultDoc==="true"&&doc)recordSearchSelection(doc,state.query);state.docId=id;refreshArticleViews(id);navigate("article");break;}
     case "toc-jump":document.getElementById(target.dataset.headingId)?.scrollIntoView({behavior:"smooth",block:"start"});break;
     case "new-doc":modalClose();startEdit(null,target.dataset.title||"");break;
     case "copy-doc":{if(!state.user){toast("문서를 복사하려면 먼저 로그인해 주세요.");showLoginModal();break;}const doc=getDoc(id);if(doc){state.editingDraft={title:`${doc.title} 복사본`,category:WIKI_CATEGORIES.includes(doc.category)?doc.category:"기타",body:docEditorBody(doc)};state.editorId=null;state.pendingChangeKind="copy";navigate("editor");}break;}
@@ -1294,7 +1408,7 @@ document.addEventListener("click",async event=>{
     case "toggle-edit-restriction":toggleEditRestriction(id);break;
     case "cancel-editor":state.editorId=null;state.editingDraft=null;state.pendingChangeKind=null;navigate("home");break;
     case "trend-search":openTrendSearch(target.dataset.term);break;
-    case "search-suggestion-doc":{hideSearchSuggestions();state.docId=id;refreshArticleViews(id);navigate("article");break;}
+    case "search-suggestion-doc":{const doc=getDoc(id);recordSearchSelection(doc,document.querySelector("#heroSearchInput")?.value||doc?.title||"");hideSearchSuggestions();state.docId=id;refreshArticleViews(id);navigate("article");break;}
     case "search-suggestion-keyword":beginSearch(target.dataset.term);break;
     case "search-category":beginSearch(target.dataset.category);break;
     case "wiki-link":{const title=String(target.dataset.title||"").trim(),doc=liveDocs().find(item=>item.title.toLowerCase()===title.toLowerCase());if(doc){state.docId=doc.id;refreshArticleViews(doc.id);navigate("article");}else startEdit(null,title);break;}
@@ -1343,9 +1457,10 @@ document.addEventListener("pointerdown",event=>{if(event.target.closest("#search
 document.addEventListener("focusin",event=>{if(event.target.id==="heroSearchInput")updateSearchSuggestions();});
 document.addEventListener("focusout",event=>{if(event.target.id==="heroSearchInput"){clearTimeout(searchSuggestionHideTimer);searchSuggestionHideTimer=setTimeout(()=>{searchSuggestionHideTimer=null;if(!document.activeElement?.closest(".search-autocomplete")&&!document.activeElement?.closest("[data-action='trend-search']"))hideSearchSuggestions();},0);}});
 document.addEventListener("input",event=>{
-  if(event.target.id==="heroSearchInput")updateSearchSuggestions();
+  if(event.target.id==="heroSearchInput"){state.searchTracking={query:normalizeSearchText(event.target.value).replace(/\s+/g,""),docId:null};updateSearchSuggestions();}
   if(event.target.id==="chatInput")resizeChatInput(event.target);
   if(event.target.id==="adminDocSearch")filterAdminDocRows();
+  if(event.target.dataset.adminSearch)filterAdminListRows(event.target.dataset.adminSearch);
   if(event.target.id==="docBody"){
     state.editingDraft={title:document.querySelector("#docTitle")?.value||"",category:document.querySelector("#docCategory")?.value||"",body:event.target.value};
     const form=document.querySelector("#editorForm");if(form){const submit=form.querySelector('button[type="submit"]');const chars=event.target.value.length, images=countImages(event.target.value), videos=countVideos(event.target.value);const over=chars>state.config.chars||images>state.config.images||videos>state.config.videos;const count=form.querySelector(".limit-count");count.className=`limit-count ${over?"over":chars>state.config.chars*.8?"near":""}`;count.textContent=over?"관리자 승인 필요":chars>state.config.chars*.8?"제한에 가까워요":"저장 공간 절약 모드";form.querySelectorAll(".limit-chip").forEach((el,i)=>el.innerHTML=[`글자 <strong>${chars.toLocaleString()} / ${state.config.chars.toLocaleString()}</strong>`,`사진 <strong>${images} / ${state.config.images}</strong>`,`동영상 <strong>${videos} / ${state.config.videos}</strong>`][i]);const current=state.editorId?state.docs.find(doc=>doc.id===state.editorId):null;submit.textContent=editorSubmitLabel(current,over);}
@@ -1375,7 +1490,7 @@ document.addEventListener("keydown",event=>{
     if(event.key==="ArrowDown"){event.preventDefault();setSearchSuggestionActive(state.searchSuggestionIndex+1);return;}
     if(event.key==="ArrowUp"){event.preventDefault();setSearchSuggestionActive(state.searchSuggestionIndex<0?state.searchSuggestions.length-1:state.searchSuggestionIndex-1);return;}
     if(event.key==="Escape"){event.preventDefault();hideSearchSuggestions();return;}
-    if(event.key==="Enter"&&state.searchSuggestionIndex>=0){event.preventDefault();const suggestion=state.searchSuggestions[state.searchSuggestionIndex];if(suggestion?.kind==="doc"){state.docId=suggestion.id;refreshArticleViews(suggestion.id);hideSearchSuggestions();navigate("article");}else if(suggestion)beginSearch(suggestion.value);return;}
+    if(event.key==="Enter"&&state.searchSuggestionIndex>=0){event.preventDefault();const suggestion=state.searchSuggestions[state.searchSuggestionIndex];if(suggestion?.kind==="doc"){const doc=getDoc(suggestion.id);recordSearchSelection(doc,document.querySelector("#heroSearchInput")?.value||suggestion.value);state.docId=suggestion.id;refreshArticleViews(suggestion.id);hideSearchSuggestions();navigate("article");}else if(suggestion)beginSearch(suggestion.value);return;}
   }
   if(event.key==="Escape"&&!modalWrap.hidden)modalClose();
   if((event.metaKey||event.ctrlKey)&&event.key.toLowerCase()==="k"){const input=document.querySelector("#heroSearchInput");if(input){event.preventDefault();input.focus({preventScroll:true});}}
