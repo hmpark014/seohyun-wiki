@@ -838,7 +838,11 @@ function buildAIExcerpt(doc,question) {
   const titleTerms=aiSearchTerms(doc.title||"");
   const termWeights=new Map(terms.map(term=>[term,(aiTermsContain(titleTerms,term)?0.25:1)/Math.max(1,bodyTerms.filter(bodyTerm=>aiTokenMatches(term,bodyTerm)).length)]));
   const paragraphs=body.split(/\n\s*\n/).map(text=>text.trim()).filter(Boolean);
-  const relevant=paragraphs.map((text,index)=>{const paragraphTerms=aiSearchTerms(text);return {text,index,score:concepts.reduce((sum,group)=>sum+(group.some(term=>aiTermsContain(paragraphTerms,term))?Math.max(...group.map(term=>termWeights.get(term)||0)):0),0);}}).filter(item=>item.score>0).sort((a,b)=>b.score-a.score||a.index-b.index);
+  const relevant=paragraphs.map((text,index)=>{
+    const paragraphTerms=aiSearchTerms(text);
+    const score=concepts.reduce((sum,group)=>sum+(group.some(term=>aiTermsContain(paragraphTerms,term))?Math.max(...group.map(term=>termWeights.get(term)||0)):0),0);
+    return {text,index,score};
+  }).filter(item=>item.score>0).sort((a,b)=>b.score-a.score||a.index-b.index);
   const selected=new Set(),parts=[];
   let length=0;
   const addPart=(text,index)=>{

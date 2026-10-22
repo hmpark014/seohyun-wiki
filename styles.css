@@ -20,6 +20,9 @@ body.dark{--ink:#eef0f7;--muted:#a2a7b6;--line:#35384a;--paper:#222435;--soft:#2
 .chat-message.is-pending{display:flex;align-items:center;gap:3px;min-height:46px}
 .chat-typing-dots{display:inline-flex;align-items:center;gap:3px;margin-left:3px}
 .chat-typing-dots i{width:4px;height:4px;border-radius:50%;background:currentColor;animation:chat-typing .9s ease-in-out infinite}
+.chat-message{cursor:text;-webkit-user-select:text!important;user-select:text!important}
+.chat-message *:not(button){-webkit-user-select:text!important;user-select:text!important}
+.chat-message button{cursor:pointer;-webkit-user-select:none;user-select:none}
 .chat-typing-dots i:nth-child(2){animation-delay:.12s}.chat-typing-dots i:nth-child(3){animation-delay:.24s}
 .chat-composer{transition:border-color .18s,box-shadow .18s}
 .chat-composer:focus-within{border-color:#aaa6ea;box-shadow:0 0 0 3px rgba(81,73,206,.1)}
