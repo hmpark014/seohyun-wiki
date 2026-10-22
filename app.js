@@ -116,21 +116,31 @@ async function setupFirebase() {
       import("https://www.gstatic.com/firebasejs/12.5.0/firebase-firestore.js"),
       import("https://www.gstatic.com/firebasejs/12.5.0/firebase-app-check.js")
     ]);
-    const app=appSdk.initializeApp(firebaseConfig), auth=authSdk.getAuth(app), db=dbSdk.getFirestore(app);
-    state.firebase={app,auth,db,authSdk,dbSdk};
-    let appCheckReady=false;
+    const app=appSdk.initializeApp(firebaseConfig);
+    let appCheck=null;
+    let appCheckTokenPromise=null;
     if(appCheckSiteKey){
       try{
-        appCheckSdk.initializeAppCheck(app,{provider:new appCheckSdk.ReCaptchaEnterpriseProvider(appCheckSiteKey),isTokenAutoRefreshEnabled:true});
-        appCheckReady=true;
+        appCheck=appCheckSdk.initializeAppCheck(app,{provider:new appCheckSdk.ReCaptchaEnterpriseProvider(appCheckSiteKey),isTokenAutoRefreshEnabled:true});
+        appCheckTokenPromise=appCheckSdk.getToken(appCheck).catch(err=>{
+          console.warn("Firebase App Check 토큰 발급 실패:",err);
+          const code=err?.code?` (${err.code})`:"";
+          state.aiSetupIssue=`Firebase App Check 토큰 발급에 실패했어요${code}. Firebase 콘솔에서 웹 앱의 reCAPTCHA Enterprise 등록과 운영 도메인을 확인해 주세요.`;
+          return null;
+        });
       }catch(err){
         console.warn("Firebase App Check 초기화 실패:",err);
-        state.aiSetupIssue="Firebase App Check 초기화에 실패했어요. Firebase 콘솔의 웹 앱 등록과 reCAPTCHA Enterprise 사이트 키를 확인해 주세요.";
+        const code=err?.code?` (${err.code})`:"";
+        state.aiSetupIssue=`Firebase App Check 초기화에 실패했어요${code}. Firebase 콘솔의 웹 앱 등록과 reCAPTCHA Enterprise 사이트 키를 확인해 주세요.`;
       }
     }else{
       state.aiSetupIssue="운영 AI를 사용하려면 Firebase App Check를 reCAPTCHA Enterprise로 등록하고, 사이트 키를 firebase-config.js에 설정해야 해요.";
     }
-    if(appCheckReady){
+    const auth=authSdk.getAuth(app), db=dbSdk.getFirestore(app);
+    state.firebase={app,auth,db,authSdk,dbSdk};
+    if(appCheckTokenPromise){
+      const appCheckToken=await appCheckTokenPromise;
+      if(appCheckToken?.token){
       try{
         const aiSdk=await import("https://www.gstatic.com/firebasejs/12.5.0/firebase-ai.js");
         const ai=aiSdk.getAI(app,{backend:new aiSdk.GoogleAIBackend()});
@@ -139,6 +149,9 @@ async function setupFirebase() {
       }catch(err){
         console.warn("Firebase AI Logic 초기화 실패:",err);
         state.aiSetupIssue="Firebase AI Logic을 시작하지 못했어요. Firebase 콘솔에서 AI Logic 설정을 확인해 주세요.";
+      }
+      }else{
+        state.aiSetupIssue ||= "Firebase App Check 토큰을 발급하지 못해 AI를 시작할 수 없어요. Firebase 콘솔의 웹 앱과 운영 도메인 설정을 확인해 주세요.";
       }
     }
     state.firebaseReady=true;watchCommunityCollections();
@@ -158,6 +171,7 @@ async function setupFirebase() {
       await syncDocsFromCloud();
       updateAccountButton(); render();
     });
+    if(state.view==="ai")render();
   } catch(err) {
     console.warn("Firebase 초기화 실패:",err);
     state.firebaseReady=true;
