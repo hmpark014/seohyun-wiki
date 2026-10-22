@@ -11,7 +11,7 @@ window.SEOHYEON_FIREBASE = {
   },
   // Public reCAPTCHA Enterprise site key registered in Firebase App Check for this web app.
   // Never put the matching secret key in this file.
-  appCheckSiteKey: ""
+  appCheckSiteKey: "6LdUpfotAAAAAPK3GMG96zMMLHx4HkoHKbfeUJ4k"
 };
 window.SEOHYEON_FIREBASE.isFirebaseConfigured = Boolean(
   window.SEOHYEON_FIREBASE.firebaseConfig.apiKey
