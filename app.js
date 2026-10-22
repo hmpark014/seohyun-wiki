@@ -23,7 +23,7 @@ const LEGACY_SAMPLE_VIEW_SEEDS = {"seohyeon-high-school":248,"school-meals":173,
 const state = {
   view:"home", query:"", docs:[], user:null, isAdmin:false, demoAdmin:false,
   config:{...DEFAULT_LIMITS}, requests:[], editRequests:[], userProfiles:[], editorPermissions:{}, editorAccess:{canApproveEditRequests:false,canManageRestrictions:false}, reports:[], searches:{}, discussions:[], changes:[], chat:[], adminTab:"overview",
-  rankPeriod:"today", changeFilter:"all", discussionTab:"open", discussionId:null, specialTool:"stale", editorId:null, editingDraft:null, docId:null, results:[], searchSuggestions:[], searchSuggestionIndex:-1, firebase:null, firebaseReady:false, gemini:null, aiSetupIssue:null, searchUnsubscribe:null,
+  rankPeriod:"today", changeFilter:"all", discussionTab:"open", discussionId:null, specialTool:"stale", editorId:null, editingDraft:null, docId:null, results:[], searchSuggestions:[], searchSuggestionIndex:-1, firebase:null, firebaseReady:false, firebaseSetupPromise:null, gemini:null, aiSetupIssue:null, aiSetupErrorCode:null, searchUnsubscribe:null,
   toastTimer:null, pendingApproval:null, communityUnsubscribers:[], editorPermissionUnsubscribe:null, editRequestsUnsubscribe:null, adminRequestsUnsubscribe:null, adminProfilesUnsubscribe:null, adminPermissionsUnsubscribe:null
 };
 let recommendationTimer=null;
@@ -125,12 +125,14 @@ async function setupFirebase() {
         appCheckTokenPromise=appCheckSdk.getToken(appCheck).catch(err=>{
           console.warn("Firebase App Check 토큰 발급 실패:",err);
           const code=err?.code?` (${err.code})`:"";
+          state.aiSetupErrorCode=err?.code||"app-check-token";
           state.aiSetupIssue=`Firebase App Check 토큰 발급에 실패했어요${code}. Firebase 콘솔에서 웹 앱의 reCAPTCHA Enterprise 등록과 운영 도메인을 확인해 주세요.`;
           return null;
         });
       }catch(err){
         console.warn("Firebase App Check 초기화 실패:",err);
         const code=err?.code?` (${err.code})`:"";
+        state.aiSetupErrorCode=err?.code||"app-check-init";
         state.aiSetupIssue=`Firebase App Check 초기화에 실패했어요${code}. Firebase 콘솔의 웹 앱 등록과 reCAPTCHA Enterprise 사이트 키를 확인해 주세요.`;
       }
     }else{
@@ -148,6 +150,7 @@ async function setupFirebase() {
         state.aiSetupIssue=null;
       }catch(err){
         console.warn("Firebase AI Logic 초기화 실패:",err);
+        state.aiSetupErrorCode=err?.code||"ai-logic-init";
         state.aiSetupIssue="Firebase AI Logic을 시작하지 못했어요. Firebase 콘솔에서 AI Logic 설정을 확인해 주세요.";
       }
       }else{
@@ -175,6 +178,7 @@ async function setupFirebase() {
   } catch(err) {
     console.warn("Firebase 초기화 실패:",err);
     state.firebaseReady=true;
+    state.aiSetupErrorCode=err?.code||"firebase-init";
     state.aiSetupIssue="Firebase 연결에 실패해 AI 답변을 사용할 수 없어요. Firebase 설정과 네트워크를 확인해 주세요.";
     showToast("Firebase를 연결하지 못했어요. 로컬 미리보기로 계속합니다.");
     if(state.view==="ai")render();
@@ -762,11 +766,23 @@ function rankRelevantDocs(question) {
   const terms=question.toLowerCase().replace(/[?？!,.]/g," ").split(/\s+/).filter(t=>t.length>1);
   return liveDocs().map(d=>{const all=`${d.title} ${d.summary} ${d.category} ${d.body}`.toLowerCase();let score=terms.reduce((sum,t)=>sum+(d.title.toLowerCase().includes(t)?4:all.includes(t)?1:0),0);return {...d,score};}).filter(d=>d.score>0).sort((a,b)=>b.score-a.score).slice(0,4);
 }
+function isDocumentCatalogQuestion(question="") {
+  return /(?:어떤|무슨|무엇|전체|모든|목록).{0,12}문서|문서.{0,16}(?:어떤|무슨|뭐|목록|이름|있|등록|올라)/i.test(question);
+}
 async function askAI(question) {
-  const matches=rankRelevantDocs(question);const sourceText=matches.map(d=>`[${d.title}]\n${d.body.slice(0,5000)}`).join("\n\n");
+  if(isFirebaseConfigured&&state.firebaseSetupPromise)await state.firebaseSetupPromise;
+  const matches=rankRelevantDocs(question);
+  if(isDocumentCatalogQuestion(question)){
+    const documents=liveDocs();
+    const shown=documents.slice(0,15);
+    const titles=shown.map(d=>d.title).join(", ");
+    return {text:documents.length?`현재 공개된 문서는 ${documents.length}개예요${titles?`: ${titles}`:""}${documents.length>shown.length?` 외 ${documents.length-shown.length}개`:""}.`:"현재 공개된 문서가 아직 없어요. 문서가 등록된 뒤 다시 질문해 주세요.",sources:shown.map(d=>d.id)};
+  }
+  const sourceText=matches.map(d=>`[${d.title}]\n${d.body.slice(0,5000)}`).join("\n\n");
   if(isFirebaseConfigured&&(!state.firebaseReady||!state.gemini)){
     const message=state.aiSetupIssue||"AI 연결을 준비하고 있어요. 잠시 후 다시 시도해 주세요.";
-    return {text:state.isAdmin?message:"AI 답변을 아직 사용할 수 없어요. 관리자에게 설정을 확인해 달라고 알려 주세요.",sources:matches.map(d=>d.id)};
+    const code=state.aiSetupErrorCode?` (오류 코드: ${state.aiSetupErrorCode})`:"";
+    return {text:state.isAdmin?message:`AI 답변을 아직 사용할 수 없어요${code}. 관리자에게 설정을 확인해 달라고 알려 주세요.`,sources:matches.map(d=>d.id)};
   }
   if(state.gemini && sourceText) {
     try {
@@ -1293,4 +1309,4 @@ window.addEventListener("popstate",event=>{
   window.scrollTo({top:0,behavior:"auto"});
 });
 render();
-setupFirebase();
+state.firebaseSetupPromise=setupFirebase();
