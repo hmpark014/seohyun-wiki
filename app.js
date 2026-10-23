@@ -23,6 +23,7 @@ const LEGACY_SAMPLE_VIEW_SEEDS = {"seohyeon-high-school":248,"school-meals":173,
 const state = {
   view:"home", query:"", docs:[], user:null, isAdmin:false, demoAdmin:false, profileSetupRequired:false,
   config:{...DEFAULT_LIMITS}, requests:[], editRequests:[], userProfiles:[], editorPermissions:{}, editorAccess:{canApproveEditRequests:false,canManageRestrictions:false}, reports:[], searches:{}, discussions:[], changes:[], chat:[], adminTab:"overview",
+  maintenance:{enabled:false,message:""}, maintenanceStatusLoaded:!isFirebaseConfigured, maintenanceUnsubscribe:null, maintenanceBusy:false,
   rankPeriod:"today", changeFilter:"all", discussionTab:"open", discussionId:null, specialTool:"stale", editorId:null, editingDraft:null, docId:null, results:[], searchSuggestions:[], searchSuggestionIndex:-1, searchTracking:{query:"",docId:null}, searchSyncIssue:null, firebase:null, firebaseReady:false, firebaseSetupPromise:null, gemini:null, aiSetupIssue:null, aiSetupErrorCode:null, searchUnsubscribe:null, chatSending:false,
   toastTimer:null, pendingApproval:null, communityUnsubscribers:[], editorPermissionUnsubscribe:null, editRequestsUnsubscribe:null, adminRequestsUnsubscribe:null, adminProfilesUnsubscribe:null, adminPermissionsUnsubscribe:null
 };
@@ -141,6 +142,7 @@ async function setupFirebase() {
     }
     const auth=authSdk.getAuth(app), db=dbSdk.getFirestore(app);
     state.firebase={app,auth,db,authSdk,dbSdk};
+    watchMaintenanceMode();
     if(appCheckTokenPromise){
       const appCheckToken=await appCheckTokenPromise;
       if(appCheckToken?.token){
@@ -181,10 +183,55 @@ async function setupFirebase() {
   } catch(err) {
     console.warn("Firebase 초기화 실패:",err);
     state.firebaseReady=true;
+    state.maintenanceStatusLoaded=true;
     state.aiSetupErrorCode=err?.code||"firebase-init";
     state.aiSetupIssue="Firebase 연결에 실패해 AI 답변을 사용할 수 없어요. Firebase 설정과 네트워크를 확인해 주세요.";
     showToast("Firebase를 연결하지 못했어요. 로컬 미리보기로 계속합니다.");
-    if(state.view==="ai")render();
+    render();
+  }
+}
+function watchMaintenanceMode(){
+  if(!state.firebase)return;
+  const {doc:docRef,onSnapshot}=state.firebase.dbSdk;
+  state.maintenanceUnsubscribe?.();
+  state.maintenanceUnsubscribe=onSnapshot(docRef(state.firebase.db,"settings","maintenance"),snapshot=>{
+    const data=snapshot.exists()?snapshot.data():{};
+    state.maintenance={enabled:data.enabled===true,message:String(data.message||"").trim().slice(0,500)};
+    state.maintenanceStatusLoaded=true;
+    render();
+  },error=>{
+    console.warn("운영 상태를 불러오지 못했습니다.",error);
+    state.maintenanceStatusLoaded=true;
+    render();
+  });
+}
+function renderMaintenancePage(checking=false){
+  return `<section class="maintenance-page" role="status" aria-live="polite"><div class="maintenance-card"><span class="maintenance-mark" aria-hidden="true">${icons.settings}</span><p class="maintenance-eyebrow">SEOHYEON WIKI</p><h1>${checking?"서비스 상태를 확인하고 있어요":"서버 점검 중입니다"}</h1><p class="maintenance-copy">${checking?"운영 상태를 확인하고 있습니다. 잠시만 기다려 주세요.":esc(state.maintenance.message||"더 안정적인 서비스를 위해 점검을 진행하고 있어요. 잠시 후 다시 방문해 주세요.")}</p>${checking?"":`<p class="maintenance-note">점검이 끝나면 서현위키를 다시 이용하실 수 있습니다.</p><button class="button button-secondary maintenance-admin-login" type="button" data-action="maintenance-admin-login">관리자 로그인</button>`}</div></section>`;
+}
+async function saveMaintenanceMode(enabled){
+  if(!state.isAdmin||!state.firebase){toast("Firebase에 연결된 관리자 계정만 운영 점검을 변경할 수 있어요.");return;}
+  if(state.maintenanceBusy)return;
+  state.maintenanceBusy=true;
+  if(state.view==="admin")render();
+  try{
+    const {doc:docRef,setDoc,serverTimestamp}=state.firebase.dbSdk;
+    await setDoc(docRef(state.firebase.db,"settings","maintenance"),{
+      enabled,
+      message:enabled?"더 안정적인 서비스를 위해 점검을 진행하고 있어요. 잠시 후 다시 방문해 주세요.":"",
+      updatedAt:serverTimestamp(),
+      updatedBy:state.user.uid
+    },{merge:true});
+    state.maintenance={enabled,message:enabled?"더 안정적인 서비스를 위해 점검을 진행하고 있어요. 잠시 후 다시 방문해 주세요.":""};
+    state.maintenanceStatusLoaded=true;
+    modalWrap.hidden=true;document.body.style.overflow="";document.body.style.paddingRight="";
+    render();
+    toast(enabled?"서버 점검을 시작했어요. 이용자에게 점검 화면이 표시됩니다.":"서버 점검을 종료했어요. 이용자가 다시 접속할 수 있습니다.");
+  }catch(error){
+    console.error("서버 점검 상태 저장 실패:",error);
+    toast("점검 상태를 저장하지 못했어요. Firebase 로그인과 Firestore 설정을 확인해 주세요.");
+  }finally{
+    state.maintenanceBusy=false;
+    if(state.view==="admin")render();
   }
 }
 async function syncEditorAuthorization(){
@@ -398,17 +445,25 @@ function navigate(view,extra={}) {
   window.scrollTo({top:0,behavior:"smooth"});
 }
 function render() {
+  const searchForm=document.querySelector("#heroSearchForm"),topbarSearchMount=document.querySelector("#topbarSearchMount");
+  if(searchForm&&topbarSearchMount)topbarSearchMount.append(searchForm);
+  document.body.classList.toggle("dark",localStorage.getItem("seohyeonwiki.theme")==="dark");
+  applyPreferences();
+  syncThemeButton();
+  const maintenanceBlocked=!state.isAdmin&&(!state.maintenanceStatusLoaded||state.maintenance.enabled);
+  document.body.classList.toggle("maintenance-mode",maintenanceBlocked);
+  if(maintenanceBlocked){
+    modalWrap.hidden=true;document.body.style.overflow="";document.body.style.paddingRight="";
+    main.innerHTML=renderMaintenancePage(!state.maintenanceStatusLoaded);
+    return;
+  }
   if(state.view==="editor"&&!state.user){
     state.view="home";state.editorId=null;state.editingDraft=null;state.pendingChangeKind=null;
     window.history.replaceState(navigationSnapshot(),"",navigationUrl());
     modalClose();
     requestAnimationFrame(()=>{toast("문서를 작성하거나 편집하려면 먼저 로그인해 주세요.");showLoginModal();});
   }
-  const searchForm=document.querySelector("#heroSearchForm"),topbarSearchMount=document.querySelector("#topbarSearchMount");
-  if(searchForm&&topbarSearchMount)topbarSearchMount.append(searchForm);
-  document.body.classList.toggle("dark",localStorage.getItem("seohyeonwiki.theme")==="dark");
-  applyPreferences();
-  syncThemeButton();
+  document.body.classList.remove("maintenance-mode");
   updateAccountButton();
   const renderers={home:renderHome,search:renderSearch,article:renderArticle,recommendations:renderRecommendations,trends:renderTrends,recentChanges:renderRecentChanges,discussions:renderDiscussions,board:renderBoard,special:renderSpecial,upload:renderUpload,editor:renderEditor,ai:renderAI,admin:renderAdmin};
   main.innerHTML=(renderers[state.view]||renderHome)();
@@ -991,6 +1046,8 @@ function renderAdmin() {
   const pendingEdits=state.editRequests.filter(r=>r.status==="pending").length;
   const pendingReports=state.reports.filter(r=>r.status!=="reviewed").length;
   const pending=pendingLimits+pendingEdits+pendingReports;
+  const canManageMaintenance=state.isAdmin&&Boolean(state.firebase)&&state.maintenanceStatusLoaded&&!state.maintenanceBusy;
+  const maintenanceControl=fullAccess?`<section class="panel maintenance-admin-card ${state.maintenance.enabled?"is-active":""}"><div class="maintenance-admin-copy"><span class="maintenance-status ${state.maintenance.enabled?"is-active":""}"><i aria-hidden="true"></i>${state.maintenanceStatusLoaded?(state.maintenance.enabled?"점검 중":"정상 운영") : "상태 확인 중"}</span><h2>서버 점검</h2><p>${state.maintenance.enabled?"일반 이용자는 점검 안내 화면만 볼 수 있어요. 관리자는 계속 관리자 센터를 이용할 수 있습니다.":"시작하면 모든 이용자에게 점검 안내가 표시되고, 관리자 계정만 사이트를 계속 이용할 수 있습니다."}${state.demoAdmin?" 실제 운영 설정은 Firebase 관리자 계정에서 바꿔 주세요.":""}</p></div><button class="button ${state.maintenance.enabled?"button-danger":"button-primary"} maintenance-toggle" type="button" data-action="toggle-maintenance" ${canManageMaintenance?"":"disabled"}>${state.maintenanceBusy?"저장 중…":state.maintenance.enabled?"점검 종료":"점검 모드 시작"}</button></section>`:"";
   const tabs=fullAccess?[["overview","개요"],["docs","문서 관리"],["requests","승인 요청",pendingLimits],["editRequests","편집 제안",pendingEdits],["permissions","편집 권한"],["reports","신고 검토",pendingReports],["settings","작성 제한"]]:[["editRequests","편집 제안",pendingEdits]];
   let body="";
   if(state.adminTab==="overview"&&fullAccess){
@@ -1005,7 +1062,7 @@ function renderAdmin() {
       ["검토 대기",pending,"editRequests","검토 목록"],
       ["이용자",state.userProfiles.length,"permissions","권한 관리"]
     ];
-    body=`<section class="panel admin-work-panel"><div class="admin-section-heading"><div><h2>검토할 항목</h2><p>확인할 항목을 선택하면 해당 목록으로 이동합니다.</p></div><span class="admin-pending-total">대기 ${pending}건</span></div><div class="admin-work-list">${tasks.map(task=>`<button type="button" class="admin-work-row" data-action="admin-tab" data-tab="${task.tab}"><span class="admin-work-count ${task.count?"needs-review":""}">${task.count||"–"}</span><span class="admin-work-copy"><strong>${task.title}</strong><small>${task.copy}</small></span><span class="admin-work-arrow" aria-hidden="true">›</span></button>`).join("")}</div></section><section class="admin-metrics" aria-label="위키 현황">${stats.map(([label,value,tab,action])=>`<button type="button" class="admin-metric" data-action="admin-tab" data-tab="${tab}"><span>${label}</span><strong>${Number(value).toLocaleString()}</strong><small>${action}</small></button>`).join("")}</section>`;
+    body=`${maintenanceControl}<section class="panel admin-work-panel"><div class="admin-section-heading"><div><h2>검토할 항목</h2><p>확인할 항목을 선택하면 해당 목록으로 이동합니다.</p></div><span class="admin-pending-total">대기 ${pending}건</span></div><div class="admin-work-list">${tasks.map(task=>`<button type="button" class="admin-work-row" data-action="admin-tab" data-tab="${task.tab}"><span class="admin-work-count ${task.count?"needs-review":""}">${task.count||"–"}</span><span class="admin-work-copy"><strong>${task.title}</strong><small>${task.copy}</small></span><span class="admin-work-arrow" aria-hidden="true">›</span></button>`).join("")}</div></section><section class="admin-metrics" aria-label="위키 현황">${stats.map(([label,value,tab,action])=>`<button type="button" class="admin-metric" data-action="admin-tab" data-tab="${tab}"><span>${label}</span><strong>${Number(value).toLocaleString()}</strong><small>${action}</small></button>`).join("")}</section>`;
   }
   if(state.adminTab==="docs"&&fullAccess){
     const managedDocs=state.docs.filter(d=>!d.sample);
@@ -1431,6 +1488,14 @@ document.addEventListener("click",async event=>{
     case "restore-change":{const entry=state.changes.find(item=>item.id===id),doc=entry&&state.docs.find(item=>item.id===entry.docId);if(!entry?.previousBody||!doc){toast("복원할 이전 내용이 없어요.");break;}modalOpen(`${modalHeader("이전 버전 복원",doc.title)}<p class="modal-copy">${nowLabel(changeTime(entry))}에 기록된 내용을 새 문서 버전으로 저장할까요?</p><div class="modal-actions"><button class="button button-secondary" data-action="close-modal">취소</button><button class="button button-primary" data-action="confirm-restore" data-id="${esc(entry.id)}">복원</button></div>`);break;}
     case "confirm-restore":{const entry=state.changes.find(item=>item.id===id),doc=entry&&state.docs.find(item=>item.id===entry.docId);if(entry?.previousBody&&doc){const restored={...doc,body:entry.previousBody,summary:entry.previousBody.replace(/^#+.*$/gm,"").trim().slice(0,160),updatedAt:Date.now()};if(doc.editRestricted&&!state.isAdmin)await submitEditProposal(restored,{chars:restored.body.length,images:doc.images?.length||0,videos:doc.videos?.length||0});else{state.pendingChangeKind="rollback";await persistDoc(restored);modalClose();}}break;}
     case "admin-tab":state.adminTab=target.dataset.tab;render();break;
+    case "toggle-maintenance":{
+      if(!state.isAdmin||!state.firebase){toast("Firebase에 연결된 관리자 계정만 서버 점검을 변경할 수 있어요.");break;}
+      const enabled=!state.maintenance.enabled;
+      modalOpen(`${modalHeader(enabled?"서버 점검을 시작할까요?":"서버 점검을 종료할까요?",enabled?"확인하면 일반 이용자에게 점검 안내 화면이 표시됩니다.":"확인하면 이용자가 다시 서현위키를 사용할 수 있습니다.")}<div class="modal-actions"><button class="button button-secondary" data-action="close-modal">취소</button><button class="button ${enabled?"button-danger":"button-primary"}" data-action="confirm-maintenance" data-enabled="${enabled}">${enabled?"점검 시작":"점검 종료"}</button></div>`);
+      break;
+    }
+    case "confirm-maintenance":await saveMaintenanceMode(target.dataset.enabled==="true");break;
+    case "maintenance-admin-login":showLoginModal();break;
     case "open-admin":modalClose();state.adminTab=getAdminAccess()?"overview":"editRequests";navigate("admin");break;
     case "admin-exit":navigate("home");break;
     case "demo-admin":state.demoAdmin=true;state.isAdmin=false;modalClose();navigate("admin",{adminTab:"overview"});toast("관리자 화면 미리보기입니다. 변경 사항은 이 브라우저에만 저장돼요.");break;

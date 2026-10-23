@@ -156,6 +156,40 @@ body.dark .ai-back-button{background:#282a3c;border-color:#3b3e52;color:#e0e3ef}
 body.dark .ai-back-button:hover{background:#343650;border-color:#525078;color:#d4d1ff}
 @media(max-width:430px){.ai-back-button{width:38px;padding:0}.ai-back-button span{display:none}.ai-heading{gap:9px}.ai-heading h1{font-size:20px}}
 
+/* Admin controlled maintenance gate */
+.maintenance-admin-card{display:flex;align-items:center;justify-content:space-between;gap:18px;padding:17px 19px;margin-bottom:13px;border-color:#e2e5ee;background:linear-gradient(115deg,#fff,#f8f9fd)}
+.maintenance-admin-card.is-active{border-color:#f1d3ce;background:linear-gradient(115deg,#fffaf8,#fff4f1)}
+.maintenance-admin-copy{min-width:0}
+.maintenance-admin-copy h2{margin:8px 0 4px;font-size:14px;letter-spacing:-.03em}
+.maintenance-admin-copy p{margin:0;color:#7d8494;font-size:10px;line-height:1.6}
+.maintenance-status{display:inline-flex;align-items:center;gap:6px;color:#438367;font-size:9px;font-weight:700}
+.maintenance-status i{width:7px;height:7px;border-radius:50%;background:#47b985;box-shadow:0 0 0 3px #47b98520}
+.maintenance-status.is-active{color:#b85f53}
+.maintenance-status.is-active i{background:#df7668;box-shadow:0 0 0 3px #df766820}
+.maintenance-toggle{min-width:112px;flex:none}
+.maintenance-page{display:grid;place-items:center;width:100%;min-height:100vh;padding:24px;background:radial-gradient(ellipse at top,#f6f7ff 0%,#f5f6f9 55%,#f0f2f7 100%);text-align:center}
+.maintenance-card{width:min(100%,480px);padding:44px 36px;border:1px solid #e7e9f0;border-radius:20px;background:#ffffffed;box-shadow:0 20px 60px #20284a12}
+.maintenance-mark{display:grid;place-items:center;width:56px;height:56px;margin:0 auto 20px;border-radius:17px;background:#f0efff;color:#5b54cc}
+.maintenance-mark svg{width:25px;height:25px;fill:none;stroke:currentColor;stroke-width:1.7;stroke-linecap:round;stroke-linejoin:round}
+.maintenance-eyebrow{margin:0 0 9px;color:#7770c9;font-size:9px;font-weight:800;letter-spacing:.14em}
+.maintenance-card h1{margin:0;color:#252a3a;font-size:23px;letter-spacing:-.05em}
+.maintenance-copy{margin:12px 0 0;color:#626a7c;font-size:12px;line-height:1.8;white-space:pre-wrap;overflow-wrap:anywhere}
+.maintenance-note{margin:12px 0 0;color:#969baa;font-size:10px;line-height:1.7}
+.maintenance-admin-login{margin-top:25px;min-height:36px}
+.maintenance-mode .topbar,.maintenance-mode .site-footer{display:none!important}
+.maintenance-mode main{display:grid;flex:1;min-height:100vh}
+body.dark .maintenance-admin-card{border-color:#3b3e52;background:linear-gradient(115deg,#222435,#25273a)}
+body.dark .maintenance-admin-card.is-active{border-color:#57403e;background:linear-gradient(115deg,#292435,#302432)}
+body.dark .maintenance-admin-copy p{color:#afb5c5}
+body.dark .maintenance-page{background:radial-gradient(ellipse at top,#25253b 0%,#191b28 58%,#151722 100%)}
+body.dark .maintenance-card{border-color:#383a4d;background:#222435ed;box-shadow:0 20px 60px #0004}
+body.dark .maintenance-mark{background:#343251;color:#c5c0ff}
+body.dark .maintenance-eyebrow{color:#b5afff}
+body.dark .maintenance-card h1{color:#eff0f7}
+body.dark .maintenance-copy{color:#c0c4d0}
+body.dark .maintenance-note{color:#9fa5b5}
+@media(max-width:600px){.maintenance-admin-card{align-items:flex-start;flex-direction:column;gap:12px}.maintenance-toggle{width:100%}.maintenance-card{padding:36px 24px}.maintenance-card h1{font-size:21px}}
+
 @property --ai-rainbow-angle {
   syntax: "<angle>";
   inherits: false;
