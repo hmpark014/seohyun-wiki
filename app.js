@@ -177,7 +177,9 @@ async function setupFirebase() {
       if(state.profileSetupRequired)showStudentProfileModal("setup");
       await syncEditorAuthorization();
       await syncDocsFromCloud();
+      if(state.isAdmin)clearOperatorLoginRoute();
       updateAccountButton(); render();
+      if(!state.isAdmin&&isOperatorLoginRoute()&&modalWrap.hidden)showLoginModal();
     });
     if(state.view==="ai")render();
   } catch(err) {
@@ -1303,6 +1305,12 @@ async function reviewReport(id) {
   if(state.firebase){const {doc:docRef,updateDoc,serverTimestamp}=state.firebase.dbSdk;await updateDoc(docRef(state.firebase.db,"reports",id),{status:"reviewed",reviewedAt:serverTimestamp(),reviewedBy:state.user?.uid||"demo-admin"}).catch(console.error);}
   saveLocal();render();toast("신고를 검토 완료로 표시했어요.");
 }
+function isOperatorLoginRoute() { return new URLSearchParams(location.search).get("operator")==="login"; }
+function clearOperatorLoginRoute() {
+  if(!isOperatorLoginRoute())return;
+  const url=new URL(location.href);url.searchParams.delete("operator");
+  history.replaceState(navigationSnapshot(),"",url.href);
+}
 function showLoginModal() {
   if(state.profileSetupRequired){showStudentProfileModal("setup");return;}
   if(state.user||state.demoAdmin){
@@ -1392,6 +1400,7 @@ async function googleLogin(form) {
     return;
   }
   state.isAdmin=Boolean(state.user?.emailVerified&&state.user.email?.toLowerCase()===ADMIN_EMAIL);state.demoAdmin=false;
+  if(state.isAdmin)clearOperatorLoginRoute();
   if(state.isAdmin||studentProfileFromDisplayName(state.user?.displayName)){
     state.profileSetupRequired=false;
     try{await cloudSaveUserProfile(state.user);}catch(profileError){console.warn("닉네임 프로필 저장에 실패했습니다.",profileError);}
