@@ -177,9 +177,7 @@ async function setupFirebase() {
       if(state.profileSetupRequired)showStudentProfileModal("setup");
       await syncEditorAuthorization();
       await syncDocsFromCloud();
-      if(state.isAdmin)clearOperatorLoginRoute();
       updateAccountButton(); render();
-      if(!state.isAdmin&&isOperatorLoginRoute()&&modalWrap.hidden)showLoginModal();
     });
     if(state.view==="ai")render();
   } catch(err) {
@@ -1305,12 +1303,6 @@ async function reviewReport(id) {
   if(state.firebase){const {doc:docRef,updateDoc,serverTimestamp}=state.firebase.dbSdk;await updateDoc(docRef(state.firebase.db,"reports",id),{status:"reviewed",reviewedAt:serverTimestamp(),reviewedBy:state.user?.uid||"demo-admin"}).catch(console.error);}
   saveLocal();render();toast("신고를 검토 완료로 표시했어요.");
 }
-function isOperatorLoginRoute() { return new URLSearchParams(location.search).get("operator")==="login"; }
-function clearOperatorLoginRoute() {
-  if(!isOperatorLoginRoute())return;
-  const url=new URL(location.href);url.searchParams.delete("operator");
-  history.replaceState(navigationSnapshot(),"",url.href);
-}
 function showLoginModal() {
   if(state.profileSetupRequired){showStudentProfileModal("setup");return;}
   if(state.user||state.demoAdmin){
@@ -1428,16 +1420,6 @@ function openSettings() {
 function refreshArticleViews(id) {
   const doc=state.docs.find(d=>d.id===id);if(doc){doc.views=(doc.views||0)+1;saveLocal();}
 }
-function openRandomDocument(){
-  const available=liveDocs().filter(doc=>!doc.sample);
-  if(!available.length){toast("아직 셔플할 문서가 없어요.");return;}
-  const choices=available.length>1?available.filter(doc=>doc.id!==state.docId):available;
-  const doc=choices[Math.floor(Math.random()*choices.length)];
-  state.docId=doc.id;
-  refreshArticleViews(doc.id);
-  navigate("article");
-}
-
 // Delegated interactions keep the single-page views simple and consistent.
 document.addEventListener("submit",event=>{
   if(event.target.id==="loginProfileForm"){event.preventDefault();googleLogin(event.target);}
@@ -1466,7 +1448,6 @@ document.addEventListener("click",async event=>{
     case "open-recommendations":navigate("recommendations");break;
     case "open-trends":navigate("trends");break;
     case "open-settings":openSettings();break;
-    case "random-doc":openRandomDocument();break;
     case "open-doc":{const doc=getDoc(id);if(target.dataset.searchResultDoc==="true"&&doc)recordSearchSelection(doc,state.query);state.docId=id;refreshArticleViews(id);navigate("article");break;}
     case "toc-jump":document.getElementById(target.dataset.headingId)?.scrollIntoView({behavior:"smooth",block:"start"});break;
     case "new-doc":modalClose();startEdit(null,target.dataset.title||"");break;
