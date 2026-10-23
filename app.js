@@ -29,6 +29,7 @@ const state = {
 let recommendationTimer=null;
 let featuredRecommendationCache={slot:null,id:null};
 let searchSuggestionHideTimer=null;
+let themeTransitionTimer=null;
 const DEFAULT_PREFERENCES={articleSize:"normal"};
 function getPreferences(){
   try {
@@ -1499,7 +1500,7 @@ document.querySelector("#themeButton").addEventListener("click",toggleTheme);
 document.querySelector("#accountButton").addEventListener("click",showLoginModal);
 document.querySelector("#footerAbout").addEventListener("click",()=>modalOpen(`${modalHeader("서현위키 이용 안내", "학교 정보를 함께 만들어요.")}<p class="modal-copy">확인 가능한 정보를 출처와 함께 기록하고, 개인정보와 다른 사람을 식별할 수 있는 내용을 게시하지 말아 주세요. 문서 제한을 넘는 편집은 관리자 승인을 요청할 수 있습니다.</p><div class="modal-actions"><button class="button button-primary" data-action="close-modal">확인</button></div>`));
 
-function toggleTheme(){const next=document.body.classList.contains("dark")?"light":"dark";localStorage.setItem("seohyeonwiki.theme",next);document.body.classList.toggle("dark",next==="dark");render();if(!modalWrap.hidden)openSettings();}
+function toggleTheme(){const next=document.body.classList.contains("dark")?"light":"dark";localStorage.setItem("seohyeonwiki.theme",next);document.body.classList.add("theme-transitioning");document.body.classList.toggle("dark",next==="dark");syncThemeButton();clearTimeout(themeTransitionTimer);themeTransitionTimer=setTimeout(()=>document.body.classList.remove("theme-transitioning"),520);}
 function syncThemeButton(){const button=document.querySelector("#themeButton");if(!button)return;const dark=document.body.classList.contains("dark");button.setAttribute("aria-label",dark?"라이트 모드로 전환":"다크 모드로 전환");button.title=dark?"라이트 모드로 전환":"다크 모드로 전환";}
 function saveLimits(){document.querySelectorAll("[data-setting]").forEach(input=>{const value=Number(input.value);if(Number.isFinite(value))state.config[input.dataset.setting]=Math.max(0,Math.min(input.dataset.setting==="chars"?50000:20,value));});if(state.config.chars<500)state.config.chars=500;saveLocal();modalClose();render();toast("작성 제한을 저장했어요. Firestore 보안 규칙도 같은 값으로 업데이트해 주세요.");}
 function insertMarkup(markup){const area=document.querySelector("#docBody");if(!area)return;const start=area.selectionStart,end=area.selectionEnd;area.setRangeText(markup,start,end,"end");area.focus();area.dispatchEvent(new Event("input",{bubbles:true}));}
