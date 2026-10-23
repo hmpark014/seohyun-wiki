@@ -206,7 +206,7 @@ function watchMaintenanceMode(){
   });
 }
 function renderMaintenancePage(checking=false){
-  return `<section class="maintenance-page" role="status" aria-live="polite"><div class="maintenance-card"><span class="maintenance-mark" aria-hidden="true">${icons.settings}</span><p class="maintenance-eyebrow">SEOHYEON WIKI</p><h1>${checking?"서비스 상태를 확인하고 있어요":"서버 점검 중입니다"}</h1><p class="maintenance-copy">${checking?"운영 상태를 확인하고 있습니다. 잠시만 기다려 주세요.":esc(state.maintenance.message||"더 안정적인 서비스를 위해 점검을 진행하고 있어요. 잠시 후 다시 방문해 주세요.")}</p>${checking?"":`<p class="maintenance-note">점검이 끝나면 서현위키를 다시 이용하실 수 있습니다.</p><button class="button button-secondary maintenance-admin-login" type="button" data-action="maintenance-admin-login">관리자 로그인</button>`}</div></section>`;
+  return `<section class="maintenance-page" role="status" aria-live="polite"><div class="maintenance-card"><span class="maintenance-mark" aria-hidden="true">${icons.settings}</span><p class="maintenance-eyebrow">SEOHYEON WIKI</p><h1>${checking?"서비스 상태를 확인하고 있어요":"서버 점검 중입니다"}</h1><p class="maintenance-copy">${checking?"운영 상태를 확인하고 있습니다. 잠시만 기다려 주세요.":esc(state.maintenance.message||"더 안정적인 서비스를 위해 점검을 진행하고 있어요. 잠시 후 다시 방문해 주세요.")}</p>${checking?"":`<p class="maintenance-note">점검이 끝나면 서현위키를 다시 이용하실 수 있습니다.</p>`}</div></section>`;
 }
 async function saveMaintenanceMode(enabled){
   if(!state.isAdmin||!state.firebase){toast("Firebase에 연결된 관리자 계정만 운영 점검을 변경할 수 있어요.");return;}
@@ -1495,7 +1495,6 @@ document.addEventListener("click",async event=>{
       break;
     }
     case "confirm-maintenance":await saveMaintenanceMode(target.dataset.enabled==="true");break;
-    case "maintenance-admin-login":showLoginModal();break;
     case "open-admin":modalClose();state.adminTab=getAdminAccess()?"overview":"editRequests";navigate("admin");break;
     case "admin-exit":navigate("home");break;
     case "demo-admin":state.demoAdmin=true;state.isAdmin=false;modalClose();navigate("admin",{adminTab:"overview"});toast("관리자 화면 미리보기입니다. 변경 사항은 이 브라우저에만 저장돼요.");break;

@@ -175,7 +175,6 @@ body.dark .ai-back-button:hover{background:#343650;border-color:#525078;color:#d
 .maintenance-card h1{margin:0;color:#252a3a;font-size:23px;letter-spacing:-.05em}
 .maintenance-copy{margin:12px 0 0;color:#626a7c;font-size:12px;line-height:1.8;white-space:pre-wrap;overflow-wrap:anywhere}
 .maintenance-note{margin:12px 0 0;color:#969baa;font-size:10px;line-height:1.7}
-.maintenance-admin-login{margin-top:25px;min-height:36px}
 .maintenance-mode .topbar,.maintenance-mode .site-footer{display:none!important}
 .maintenance-mode main{display:grid;flex:1;min-height:100vh}
 body.dark .maintenance-admin-card{border-color:#3b3e52;background:linear-gradient(115deg,#222435,#25273a)}
