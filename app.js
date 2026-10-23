@@ -1396,7 +1396,6 @@ async function googleLogin(form) {
     return;
   }
   state.isAdmin=Boolean(state.user?.emailVerified&&state.user.email?.toLowerCase()===ADMIN_EMAIL);state.demoAdmin=false;
-  if(state.isAdmin)clearOperatorLoginRoute();
   if(state.isAdmin||studentProfileFromDisplayName(state.user?.displayName)){
     state.profileSetupRequired=false;
     try{await cloudSaveUserProfile(state.user);}catch(profileError){console.warn("닉네임 프로필 저장에 실패했습니다.",profileError);}
