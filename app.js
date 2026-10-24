@@ -3,7 +3,7 @@ const { firebaseConfig, isFirebaseConfigured, appCheckSiteKey } = window.SEOHYEO
 const ADMIN_EMAIL = "hmpark014@gmail.com";
 const SCHOOL_EMAIL_PATTERN = /^25-\d{5}@seohyun\.hs\.kr$/i;
 const DEFAULT_LIMITS = { chars: 6000, images: 2, videos: 0 };
-const WIKI_CATEGORIES = ["학교", "학교 생활", "교칙·제도", "수업·교육과정", "학교 활동", "동아리", "학교 역사", "시설·공간", "기타"];
+const WIKI_CATEGORIES = ["학교", "학교 생활", "교칙·제도", "수업·교육과정", "학교 활동", "동아리", "학교 역사", "시설·공간", "서현위키", "기타"];
 const BLOCKED_PROFILE_TERMS = [
   "새끼","개새끼","씹새끼","씨발","시발","씨바","시바","씨팔","시팔","씨부랄","씨부럴","쌍년","쌍놈","병신","븅신","빙신","병쉰","지랄","염병","좆","좃","조까","좆까","개소리","느금마","니엄마","니애미","애미","애비","창녀","걸레","미친놈","미친년","또라이","꺼져","닥쳐","ㅅㅂ","ㅆㅂ","ㅂㅅ","ㅈㄹ",
   "섹스","성교","성관계","자지","보지","음경","음부","성기","자위","딸딸이","야동","포르노","강간","성폭행","성추행","정액","오르가즘","유두","후장","애널",
@@ -1697,7 +1697,7 @@ function inlineMarkdown(line,context={footnotes:[]}){
   source=source.replace(/\[\*\s*([^\]]+)\]/g,(_,note)=>{const index=context.footnotes.push(note.trim());return stash(`<sup class="wiki-footnote-ref"><a id="wiki-footnote-ref-${index}" href="#wiki-footnote-${index}" aria-label="각주 ${index}">[${index}]</a></sup>`);});
   let safe=esc(source);
   safe=safe.replace(/\{\{\{\s*([+-][1-5])\s+([\s\S]+?)\}\}\}/g,(_,size,content)=>`<span class="wiki-size-${Math.abs(Number(size))}${size.startsWith("-")?" wiki-size-down":""}">${content}</span>`);
-  safe=safe.replace(/\{\{\{\s*#([^\s,{}]+)(?:,([^{}]+))?\s+([\s\S]+?)\}\}\}/g,(_,foreground,background,content)=>{const fg=safeWikiColor(foreground),bg=background?safeWikiColor(background):"";return fg||bg?`<span class="wiki-colored-text" style="${fg?`color:${esc(fg)};`:""}${bg?`background-color:${esc(bg)};`:""}">${content}</span>`:content;});
+  safe=safe.replace(/\{\{\{\s*#([^\s,{}]+)(?:,([^,{}\s]+))?\s+([\s\S]+?)\}\}\}/g,(_,foreground,background,content)=>{const fg=safeWikiColor(foreground),bg=background?safeWikiColor(background):"";return fg||bg?`<span class="wiki-colored-text" style="${fg?`color:${esc(fg)};`:""}${bg?`background-color:${esc(bg)};`:""}">${content}</span>`:content;});
   safe=safe.replace(/'''(.+?)'''/g,"<strong>$1</strong>").replace(/''(.+?)''/g,"<em>$1</em>").replace(/__(.+?)__/g,"<u>$1</u>").replace(/~~(.+?)~~|--(.+?)--/g,(_,a,b)=>`<del>${a||b}</del>`).replace(/\^\^(.+?)\^\^/g,"<sup>$1</sup>").replace(/,,(.+?),,/g,"<sub>$1</sub>").replace(/\*\*(.+?)\*\*/g,"<strong>$1</strong>").replace(/`([^`]+)`/g,"<code>$1</code>");
   safe=safe.replace(/\[([^\]]+)\]\((https?:\/\/[^\s)]+)\)/g,'<a href="$2" target="_blank" rel="noopener noreferrer">$1</a>').replace(/(https?:\/\/[^\s<]+)/g,'<a href="$1" target="_blank" rel="noopener noreferrer" class="media-url">$1</a>');
   return safe.replace(/\uE000(\d+)\uE001/g,(_,index)=>tokens[Number(index)]||"");

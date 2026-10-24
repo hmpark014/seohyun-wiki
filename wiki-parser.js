@@ -243,7 +243,7 @@
     const stash = html => "\uE000" + (tokens.push(html) - 1) + "\uE001";
     let source = String(input ?? "");
     source = source.replace(/\\(\[\[|\]\]|\{\{\{|\}\}\}|\[|\]|\*|_|~|\^|,|\\)/g, (_, value) => stash(escapeHtml(value)));
-    source = source.replace(/\{\{\{\s*#([^,{}\s]+)(?:,([^{}]+))?\s+([\s\S]+?)\}\}\}/g,
+    source = source.replace(/\{\{\{\s*#([^,{}\s]+)(?:,([^,{}\s]+))?\s+([\s\S]+?)\}\}\}/g,
       (_, light, dark, content) => {
         const color = safeColor(light), darkColor = dark ? safeColor(dark) : "";
         return color ? stash('<span class="wiki-colored-text" style="--wiki-color-light:' + escapeHtml(color) +
