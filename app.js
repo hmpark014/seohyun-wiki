@@ -25,7 +25,8 @@ const state = {
   config:{...DEFAULT_LIMITS}, requests:[], editRequests:[], userProfiles:[], editorPermissions:{}, editorAccess:{canApproveEditRequests:false,canManageRestrictions:false}, reports:[], searches:{}, discussions:[], changes:[], chat:[], adminTab:"overview",
   maintenance:{enabled:false,message:""}, maintenanceStatusLoaded:!isFirebaseConfigured, maintenanceUnsubscribe:null, maintenanceBusy:false,
   rankPeriod:"today", changeFilter:"all", discussionTab:"open", discussionId:null, specialTool:"stale", editorId:null, editingDraft:null, docId:null, results:[], searchSuggestions:[], searchSuggestionIndex:-1, searchTracking:{query:"",docId:null}, searchSyncIssue:null, firebase:null, firebaseReady:false, firebaseSetupPromise:null, gemini:null, aiSetupIssue:null, aiSetupErrorCode:null, searchUnsubscribe:null, chatSending:false,
-  toastTimer:null, pendingApproval:null, communityUnsubscribers:[], editorPermissionUnsubscribe:null, editRequestsUnsubscribe:null, adminRequestsUnsubscribe:null, adminProfilesUnsubscribe:null, adminPermissionsUnsubscribe:null
+  toastTimer:null, pendingApproval:null, communityUnsubscribers:[], editorPermissionUnsubscribe:null, editRequestsUnsubscribe:null, adminRequestsUnsubscribe:null, adminProfilesUnsubscribe:null, adminPermissionsUnsubscribe:null,
+  editorImageSelection:null, editorImageUploadBusy:false
 };
 let recommendationTimer=null;
 let featuredRecommendationCache={slot:null,id:null};
@@ -119,6 +120,13 @@ async function setupFirebase() {
       import("https://www.gstatic.com/firebasejs/12.5.0/firebase-app-check.js")
     ]);
     const app=appSdk.initializeApp(firebaseConfig);
+    let storageSdk=null, storage=null;
+    try{
+      storageSdk=await import("https://www.gstatic.com/firebasejs/12.5.0/firebase-storage.js");
+      storage=storageSdk.getStorage(app);
+    }catch(storageError){
+      console.warn("Firebase Storage 초기화 실패:",storageError);
+    }
     let appCheck=null;
     let appCheckTokenPromise=null;
     if(appCheckSiteKey){
@@ -141,7 +149,7 @@ async function setupFirebase() {
       state.aiSetupIssue="운영 AI를 사용하려면 Firebase App Check를 reCAPTCHA Enterprise로 등록하고, 사이트 키를 firebase-config.js에 설정해야 해요.";
     }
     const auth=authSdk.getAuth(app), db=dbSdk.getFirestore(app);
-    state.firebase={app,auth,db,authSdk,dbSdk};
+    state.firebase={app,auth,db,authSdk,dbSdk,storage,storageSdk};
     watchMaintenanceMode();
     if(appCheckTokenPromise){
       const appCheckToken=await appCheckTokenPromise;
@@ -1472,7 +1480,7 @@ document.addEventListener("submit",event=>{
   }
 });
 document.addEventListener("mousedown",event=>{
-  if(event.target.closest("#editorForm [data-action='insert-markup'], #editorForm [data-action='editor-format']"))event.preventDefault();
+  if(event.target.closest("#editorForm [data-action='insert-markup'], #editorForm [data-action='editor-format'], #editorForm [data-action='upload-editor-image']"))event.preventDefault();
 });
 document.addEventListener("click",async event=>{
   const target=event.target.closest("[data-action],[data-view]");if(!target)return;
@@ -1539,6 +1547,15 @@ document.addEventListener("click",async event=>{
     case "save-limits":saveLimits();break;
     case "admin-save-overlimit":{const doc=JSON.parse(target.dataset.doc);modalClose();await persistDoc(doc);break;}
     case "insert-markup":insertMarkup(target.dataset.markup,target.dataset.selectMarkup||"");break;
+    case "upload-editor-image":{
+      const area=document.querySelector("#docBody");
+      if(!state.user){toast("사진을 올리려면 먼저 로그인해 주세요.");showLoginModal();break;}
+      if(!area){toast("문서 본문 입력란을 찾을 수 없어요.");break;}
+      state.editorImageSelection={start:area.selectionStart,end:area.selectionEnd};
+      const picker=document.querySelector("#editorImageFile");
+      if(picker){picker.value="";picker.click();}
+      break;
+    }
     case "editor-format":formatEditorText(target.dataset.before||"",target.dataset.after||"",target.dataset.placeholder||"텍스트");break;
     case "editor-pane":setEditorPane(target.dataset.pane||"write");break;
     case "footer-about":modalOpen(`${modalHeader("서현위키 이용 안내", "학교 정보를 함께 만들어요.")}<p class="modal-copy">확인 가능한 정보를 출처와 함께 기록하고, 개인정보와 다른 사람을 식별할 수 있는 내용을 게시하지 말아 주세요. 문서 제한을 넘는 편집은 관리자 승인을 요청할 수 있습니다.</p><div class="modal-actions"><button class="button button-primary" data-action="close-modal">확인</button></div>`);break;
@@ -1574,6 +1591,10 @@ document.addEventListener("change",event=>{
   if(event.target.id==="adminDocFilter")filterAdminDocRows();
   if(event.target.id==="settingsArticleSize")savePreference("articleSize",event.target.value);
   if(event.target.id==="docCategory")state.editingDraft={title:document.querySelector("#docTitle")?.value||"",category:event.target.value,body:document.querySelector("#docBody")?.value||""};
+  if(event.target.id==="editorImageFile"){
+    const file=event.target.files?.[0];
+    if(file)uploadEditorImage(file);
+  }
 });
 document.addEventListener("keydown",event=>{
   if(event.target.id==="chatInput"&&event.key==="Enter"&&!event.shiftKey){
@@ -1610,6 +1631,77 @@ function insertMarkup(markup,selectMarkup=""){
   area.setRangeText(inserted,start,end,"end");
   if(focusOffset>=0)area.setSelectionRange(start+focusOffset,start+focusOffset+focusLength);
   area.focus();area.dispatchEvent(new Event("input",{bubbles:true}));
+}
+async function uploadEditorImage(file){
+  const allowedTypes=new Set(["image/jpeg","image/png","image/webp","image/gif"]);
+  const finish=()=>{
+    const currentPicker=document.querySelector("#editorImageFile"),currentButton=document.querySelector("#editorForm [data-action='upload-editor-image']"),currentSubmit=document.querySelector('#editorForm button[type="submit"]');
+    if(currentPicker)currentPicker.value="";
+    if(currentButton){currentButton.disabled=false;currentButton.textContent="갤러리에서 사진 선택";}
+    if(currentSubmit)currentSubmit.disabled=false;
+    state.editorImageUploadBusy=false;
+  };
+  if(state.editorImageUploadBusy)return;
+  state.editorImageUploadBusy=true;
+  const button=document.querySelector("#editorForm [data-action='upload-editor-image']"),status=document.querySelector("#editorImageUploadStatus"),submitButton=document.querySelector('#editorForm button[type="submit"]');
+  if(button){button.disabled=true;button.textContent="사진 준비 중…";}
+  if(submitButton)submitButton.disabled=true;
+  if(status)status.textContent="사진 파일을 확인하고 있어요…";
+  let uploadFile=file;
+  if(!allowedTypes.has(uploadFile.type)&&/\.(heic|heif)$/i.test(uploadFile.name)){
+    try{
+      const bitmap=await createImageBitmap(uploadFile),canvas=document.createElement("canvas");
+      canvas.width=bitmap.width;canvas.height=bitmap.height;
+      canvas.getContext("2d").drawImage(bitmap,0,0);bitmap.close?.();
+      const jpeg=await new Promise(resolve=>canvas.toBlob(resolve,"image/jpeg",0.9));
+      if(!jpeg)throw new Error("HEIC 변환 실패");
+      uploadFile=new File([jpeg],uploadFile.name.replace(/\.(heic|heif)$/i,".jpg"),{type:"image/jpeg",lastModified:Date.now()});
+    }catch{
+      toast("이 브라우저에서 HEIC 사진을 열 수 없어요. 사진 앱에서 JPEG로 변환한 뒤 올려 주세요.");finish();return;
+    }
+  }
+  if(!allowedTypes.has(uploadFile.type)){
+    toast("JPEG, PNG, WebP, GIF 사진을 선택해 주세요.");
+    finish();return;
+  }
+  if(uploadFile.size>5*1024*1024){toast("사진은 5MB 이하로 올려 주세요.");finish();return;}
+  if(!state.user){toast("사진을 올리려면 먼저 로그인해 주세요.");finish();showLoginModal();return;}
+  if(!state.firebase?.storage||!state.firebase?.storageSdk){
+    toast("Firebase Storage가 아직 준비되지 않았어요. Firebase 콘솔에서 Storage 버킷을 만든 뒤 Storage 규칙을 배포해 주세요.",6500);
+    if(status)status.textContent="Firebase Storage 설정이 끝나면 사진 업로드를 사용할 수 있어요.";
+    finish();return;
+  }
+  const area=document.querySelector("#docBody");
+  if(!area){toast("문서 편집 화면이 닫혀 사진을 넣지 못했어요.");finish();return;}
+  if(button)button.textContent="사진 올리는 중…";
+  if(status)status.textContent="사진을 저장소에 올리고 있어요…";
+  try{
+    const {ref,uploadBytes,getDownloadURL}=state.firebase.storageSdk;
+    const cleanName=uploadFile.name.replace(/[^a-zA-Z0-9._-]+/g,"-").replace(/^-+|-+$/g,"").slice(0,80)||"image";
+    const suffix=globalThis.crypto?.randomUUID?.()||Math.random().toString(36).slice(2,10);
+    const objectRef=ref(state.firebase.storage,`wiki-images/${state.user.uid}/${Date.now()}-${suffix}-${cleanName}`);
+    const uploaded=await uploadBytes(objectRef,uploadFile,{contentType:uploadFile.type});
+    const url=await getDownloadURL(uploaded.ref);
+    if(!area.isConnected||state.view!=="editor"){
+      await state.firebase.storageSdk.deleteObject(uploaded.ref).catch(()=>{});
+      throw Object.assign(new Error("편집 화면이 닫혔습니다."),{code:"wiki/editor-closed"});
+    }
+    const markup=`[[파일:${url}]]`;
+    const selection=state.editorImageSelection||{start:area.selectionStart,end:area.selectionEnd};
+    const start=Math.min(Math.max(0,selection.start),area.value.length),end=Math.min(Math.max(start,selection.end),area.value.length);
+    area.setRangeText(markup,start,end,"end");
+    area.setSelectionRange(start+markup.length,start+markup.length);
+    area.focus();area.dispatchEvent(new Event("input",{bubbles:true}));
+    state.editorImageSelection=null;
+    if(status)status.textContent="사진을 올려 본문에 넣었어요. 저장 전 미리보기를 확인해 주세요.";
+    toast("사진을 올려 본문에 넣었어요.");
+  }catch(error){
+    console.error("Firebase Storage 이미지 업로드 실패:",error);
+    const code=String(error?.code||"");
+    const message=code.includes("editor-closed")?"편집 화면이 닫혀 업로드한 사진을 정리했어요. 편집 화면에서 다시 올려 주세요.":code.includes("unauthorized")?"사진 업로드 권한이 없어요. Firebase Storage 규칙을 배포했는지 확인해 주세요.":code.includes("bucket")||code.includes("no-default-bucket")?"Firebase Storage 버킷을 아직 만들지 않았어요. Firebase 콘솔에서 Storage를 설정해 주세요.":"사진을 올리지 못했어요. Storage 설정·규칙과 인터넷 연결을 확인해 주세요.";
+    if(status)status.textContent=message;
+    toast(message,6500);
+  }finally{finish();}
 }
 function formatEditorText(before,after,placeholder="텍스트"){
   const area=document.querySelector("#docBody");if(!area)return;
@@ -1765,16 +1857,19 @@ function renderEditor(){
         <button type="button" data-action="insert-markup" data-markup="|| 제목 || 설명 ||\n|| 내용 || 내용 ||\n" data-select-markup="제목">표</button>
         <button type="button" data-action="insert-markup" data-markup="[tableofcontents]\n">목차</button>
         <button type="button" data-action="insert-markup" data-markup="[* 각주 내용]" data-select-markup="각주 내용">각주</button>
-        <button type="button" data-action="insert-markup" data-markup="[[파일:https://주소/사진.jpg|width=600]]" data-select-markup="https://주소/사진.jpg">사진</button>
+        <button type="button" data-action="insert-markup" data-markup="[[파일:https://주소/사진.jpg|width=600]]" data-select-markup="https://주소/사진.jpg">사진 주소</button>
+        <button type="button" data-action="upload-editor-image" ${state.editorImageUploadBusy?"disabled":""}>갤러리에서 사진 선택</button>
         <button type="button" data-action="insert-markup" data-markup="[youtube(영상ID)]" data-select-markup="영상ID">영상</button>
       </div>
+      <input id="editorImageFile" type="file" accept="image/*" aria-label="업로드할 사진 파일 선택" hidden>
+      <span id="editorImageUploadStatus" class="editor-image-upload-status" role="status" aria-live="polite">${state.editorImageUploadBusy?"사진을 저장소에 올리고 있어요…":""}</span>
       <details class="editor-markup-help"><summary>다른 문법 찾아보기</summary><div class="editor-markup-content">${grammar}</div></details>
       <div class="editor-pane-tabs" role="tablist" aria-label="본문 보기 방식"><button type="button" data-action="editor-pane" data-pane="write" aria-pressed="true">작성</button><button type="button" data-action="editor-pane" data-pane="preview" aria-pressed="false">미리보기</button><span>미리보기에서 저장 전 결과를 확인할 수 있어요.</span></div>
       <div id="editorWritePane" class="editor-source-pane"><textarea id="docBody" name="body" required placeholder="= 문서 제목 =\n[tableofcontents]\n\n= 소개 =\n\n확인된 내용을 편하게 적어 주세요. 서식 버튼으로 제목과 글자 모양을 넣을 수 있어요.">${esc(draft.body)}</textarea></div>
       <div id="editorPreviewPane" class="editor-preview-pane" hidden><div class="editor-preview-note">저장 전 미리보기 · 링크는 문서에 저장한 뒤 사용할 수 있어요.</div><div id="editorPreview" class="article-body">${editorPreviewHtml(draft.body)}</div></div>
-      <span class="field-hint">사진은 공개 이미지 주소로 표시합니다. 학생 얼굴이나 개인 정보를 확인하고 게시하지 마세요.</span>
+      <span class="field-hint">JPEG·PNG·WebP·GIF 사진을 5MB 이하로 올릴 수 있어요. HEIC는 브라우저가 열 수 있으면 JPEG로 변환해요. 업로드한 사진은 문서와 함께 공개되니 학생 얼굴이나 개인 정보는 올리지 마세요.</span>
     </div>
-    <div class="limits-row"><span class="limit-chip">글자 <strong>${chars.toLocaleString()} / ${state.config.chars.toLocaleString()}</strong></span><span class="limit-chip">사진 <strong>${imageCount} / ${state.config.images}</strong></span><span class="limit-chip">동영상 <strong>${videoCount} / ${state.config.videos}</strong></span><span class="limit-count ${over?"over":near?"near":""}">${over?"관리자 승인 필요":near?"제한에 가까워요":"저장 공간 절약 모드"}</span></div><div class="editor-actions"><span class="editor-actions-left">문서는 저장 후 검색과 AI 답변에 반영됩니다.</span><div class="editor-actions-right"><button type="submit" class="button button-primary">${editorSubmitLabel(current,over)}</button></div></div></form></div>`;
+    <div class="limits-row"><span class="limit-chip">글자 <strong>${chars.toLocaleString()} / ${state.config.chars.toLocaleString()}</strong></span><span class="limit-chip">사진 <strong>${imageCount} / ${state.config.images}</strong></span><span class="limit-chip">동영상 <strong>${videoCount} / ${state.config.videos}</strong></span><span class="limit-count ${over?"over":near?"near":""}">${over?"관리자 승인 필요":near?"제한에 가까워요":"저장 공간 절약 모드"}</span></div><div class="editor-actions"><span class="editor-actions-left">문서는 저장 후 검색과 AI 답변에 반영됩니다.</span><div class="editor-actions-right"><button type="submit" class="button button-primary" ${state.editorImageUploadBusy?"disabled":""}>${editorSubmitLabel(current,over)}</button></div></div></form></div>`;
 }
 
 

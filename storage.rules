@@ -1,0 +1,26 @@
+rules_version = '2';
+service firebase.storage {
+  match /b/{bucket}/o {
+    function schoolWikiUser() {
+      return request.auth != null
+        && request.auth.token.email_verified == true
+        && (request.auth.token.email == 'hmpark014@gmail.com'
+          || request.auth.token.email.matches('^25-[0-9]{5}@seohyun[.]hs[.]kr$'));
+    }
+
+    function admin() {
+      return schoolWikiUser() && request.auth.token.email == 'hmpark014@gmail.com';
+    }
+
+    match /wiki-images/{userId}/{fileName} {
+      // 위키 문서의 사진은 비로그인 방문자도 볼 수 있습니다.
+      allow read: if true;
+      allow create: if schoolWikiUser()
+        && request.auth.uid == userId
+        && request.resource.size <= 5 * 1024 * 1024
+        && request.resource.contentType in ['image/jpeg', 'image/png', 'image/webp', 'image/gif'];
+      allow update: if false;
+      allow delete: if schoolWikiUser() && (request.auth.uid == userId || admin());
+    }
+  }
+}
