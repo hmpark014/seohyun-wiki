@@ -465,3 +465,29 @@ body.dark .article-body .wiki-quote{border-color:#555a52;color:#b8bbb2}
 .admin-page .admin-return-button{margin-top:12px}
 .admin-list-panel .request-row[hidden]{display:none!important}
 .profile-fixed-number{display:flex;align-items:center;gap:9px;margin:0 0 12px;padding:11px 12px;border:1px solid #e5e8f0;border-radius:9px;background:#f7f8fc;color:#697082;font-size:11px}.profile-fixed-number strong{color:#34394b}.profile-fixed-number small{margin-left:auto;color:#9096a5;font-size:9px}body.dark .profile-fixed-number{border-color:#3b3e52;background:#292b3b;color:#b4bacb}body.dark .profile-fixed-number strong{color:#eef0f7}body.dark .profile-fixed-number small{color:#a5aabb}
+
+/* Wiki writing syntax: tables, nested list levels, footnotes and safe embeds. */
+.article-body h4,.article-body h5,.article-body h6{scroll-margin-top:24px;margin:23px 0 8px;color:#42433d;font-size:16px;font-weight:700;line-height:1.5;letter-spacing:-.025em}
+.article-toc-top .toc-item.level-4,.article-toc-top .toc-item.level-5,.article-toc-top .toc-item.level-6{padding-left:3px;color:#888983}
+.article-body .wiki-list .wiki-list{margin:3px 0 5px;padding-left:22px}
+.article-body .wiki-table-wrap{max-width:100%;margin:19px 0 23px;overflow-x:auto;border:1px solid #e8e9e6;border-radius:8px}
+.article-body .wiki-table{width:100%;border-collapse:collapse;color:inherit;font-size:.92em;line-height:1.65}
+.article-body .wiki-table td{min-width:72px;padding:9px 12px;border:1px solid #e8e9e6;vertical-align:top}
+.article-body .wiki-table tr:first-child td{background:#f7f8f6;font-weight:650}
+.article-body .wiki-table .align-left{text-align:left}.article-body .wiki-table .align-center{text-align:center}.article-body .wiki-table .align-right{text-align:right}
+.article-body .wiki-footnote-ref{margin-inline:2px;font-size:.72em;vertical-align:super}
+.article-body .wiki-footnotes{margin:28px 0 5px;padding:13px 15px;border:1px solid #e8e9e6;border-radius:8px;background:#f8f9f7;font-size:.86em;line-height:1.7}
+.article-body .wiki-footnotes>strong{font-size:.9em}.article-body .wiki-footnotes ol{margin:7px 0 0;padding-left:22px}.article-body .wiki-footnotes li{padding:2px 0}.article-body .wiki-footnote-back{margin-left:5px;text-decoration:none!important}
+.article-body .wiki-size-1{font-size:1.12em}.article-body .wiki-size-2{font-size:1.25em}.article-body .wiki-size-3{font-size:1.4em}.article-body .wiki-size-4{font-size:1.6em}.article-body .wiki-size-5{font-size:1.85em}
+.article-body .wiki-size-down.wiki-size-1{font-size:.9em}.article-body .wiki-size-down.wiki-size-2{font-size:.8em}.article-body .wiki-size-down.wiki-size-3{font-size:.7em}.article-body .wiki-size-down.wiki-size-4{font-size:.62em}.article-body .wiki-size-down.wiki-size-5{font-size:.55em}
+.article-body .wiki-colored-text{padding-inline:1px;border-radius:2px}
+.article-body .wiki-video{position:relative;width:min(100%,720px);margin:18px 0 22px;overflow:hidden;border-radius:9px;background:#111;aspect-ratio:16/9}
+.article-body .wiki-video iframe{position:absolute;inset:0;width:100%;height:100%;border:0}
+.editor-markup-grid code{white-space:normal;overflow-wrap:anywhere}.editor-markup-grid span{align-items:flex-start}.editor-markup-grid small{flex:none}
+.editor-markup-content .editor-markup-note{margin:9px 0 0;padding-top:8px;border-top:1px solid #ececf3;color:#969baa;font-size:9px}
+body.dark .article-body h4,body.dark .article-body h5,body.dark .article-body h6{color:#e0e1da}
+body.dark .article-body .wiki-table-wrap,body.dark .article-body .wiki-table td{border-color:#383a37}
+body.dark .article-body .wiki-table tr:first-child td{background:#292b27}
+body.dark .article-body .wiki-footnotes{border-color:#383a37;background:#272925}
+body.dark .editor-markup-content .editor-markup-note{border-color:#393c50;color:#9da3b4}
+@media(max-width:430px){.article-body .wiki-table td{min-width:64px;padding:7px 9px}.editor-markup-grid span{align-items:flex-start}}

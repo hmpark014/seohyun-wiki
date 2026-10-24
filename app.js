@@ -737,15 +737,17 @@ function editorSubmitLabel(current,over){
 }
 function countImages(text) {
   const marked=(text.match(/^\[사진\]\s*https?:\/\/[^\s|]+/gim)||[]).length;
-  const remaining=text.replace(/^\[사진\]\s*https?:\/\/[^\s|]+/gim,"");
+  const namu=(text.match(/\[\[파일:\s*https?:\/\/[^\]|]+(?:\|[^\]]*)?\]\]/gi)||[]).length;
+  const remaining=text.replace(/^\[사진\]\s*https?:\/\/[^\s|]+/gim,"").replace(/\[\[파일:\s*https?:\/\/[^\]|]+(?:\|[^\]]*)?\]\]/gi,"");
   const markdownImages=remaining.match(/!\[[^\]]*\]\(https?:\/\/[^)]+\)/gi)||[];
   const otherImages=remaining.replace(/!\[[^\]]*\]\(https?:\/\/[^)]+\)/gi,"").match(/\bhttps?:\/\/[^\s)]+\.(?:png|jpe?g|gif|webp)(?:\?[^\s)]*)?/gi)||[];
-  return marked+markdownImages.length+otherImages.length;
+  return marked+namu+markdownImages.length+otherImages.length;
 }
 function countVideos(text) {
   const marked=(text.match(/^\[영상\]\s*https?:\/\/[^\s]+/gim)||[]).length;
-  const remaining=text.replace(/^\[영상\]\s*https?:\/\/[^\s]+/gim,"");
-  return marked+(remaining.match(/(?:youtube\.com\/watch\?v=|youtu\.be\/|vimeo\.com\/\d+)/gi)||[]).length;
+  const namu=(text.match(/\[youtube\([A-Za-z0-9_-]{6,20}\)\]/gi)||[]).length;
+  const remaining=text.replace(/^\[영상\]\s*https?:\/\/[^\s]+/gim,"").replace(/\[youtube\([A-Za-z0-9_-]{6,20}\)\]/gi,"");
+  return marked+namu+(remaining.match(/(?:youtube\.com\/watch\?v=|youtu\.be\/|vimeo\.com\/\d+)/gi)||[]).length;
 }
 function renderRecommendations() {
   const docs=liveDocs().filter(doc=>!doc.sample).slice().sort((a,b)=>recommendScore(b)-recommendScore(a));
@@ -1574,6 +1576,92 @@ async function sendChat(){
 }
 function resizeChatInput(input){input.style.height="auto";const maxHeight=140;input.style.height=`${Math.min(input.scrollHeight,maxHeight)}px`;input.style.overflowY=input.scrollHeight>maxHeight?"auto":"hidden";}
 function scrollChatToBottom(){requestAnimationFrame(()=>{const box=document.querySelector("#chatMessages");box?.scrollTo({top:box.scrollHeight,behavior:"smooth"});});}
+
+// Namu-compatible writing syntax, while retaining the legacy SeohyeonWiki syntax for saved pages.
+function markdownHtml(text="",headingIds=null,tocMarkup=null) {
+  const headings=headingIds===null?documentHeadings(text):null;
+  if(headingIds===null)headingIds=headings.map(heading=>heading.id);
+  if(tocMarkup===null)tocMarkup=renderTocMarkup(headings||documentHeadings(text));
+  const output=[];let listRoots=[],listStack=[],headingIndex=0;const inlineContext={footnotes:[]};
+  const renderHeading=(level,value)=>{const id=headingIds?.[headingIndex++];return `<h${level}${id?` id="${esc(id)}"`:""}>${inlineMarkdown(value,inlineContext)}</h${level}>`;};
+  const renderList=nodes=>{let html="";for(let i=0;i<nodes.length;){const type=nodes[i].type;let j=i;while(j<nodes.length&&nodes[j].type===type)j++;const tag=type==="ol"?"ol":"ul";html+=`<${tag} class="wiki-list">${nodes.slice(i,j).map(node=>`<li>${inlineMarkdown(node.text,inlineContext)}${node.children.length?renderList(node.children):""}</li>`).join("")}</${tag}>`;i=j;}return html;};
+  const flushList=()=>{if(listRoots.length){output.push(renderList(listRoots));listRoots=[];listStack=[];}};
+  const addListItem=(depth,type,value)=>{const node={type,text:value,children:[]};if(depth<=0||!listStack.length){listRoots.push(node);listStack=[node];return;}const parent=listStack[Math.min(depth-1,listStack.length-1)];parent.children.push(node);listStack=listStack.slice(0,depth);listStack.push(node);};
+  const lines=String(text).split(/\r?\n/);
+  for(let lineIndex=0;lineIndex<lines.length;lineIndex++){
+    const line=lines[lineIndex],trimmed=line.trim();
+    if(!trimmed){flushList();continue;}
+    if(trimmed==="[목차]"||trimmed==="[[목차]]"||trimmed==="#목차#"||trimmed==="#목차"){flushList();output.push(tocMarkup);continue;}
+    const legacyTocHeading=trimmed.match(/^(?:#목차#?|\[목차\])\s*(.+)$/);
+    if(legacyTocHeading){flushList();output.push(renderHeading(2,legacyTocHeading[1]));continue;}
+    const namuHeading=trimmed.match(/^(={2,6})\s*(.*?)\s*\1\s*$/);
+    if(namuHeading){flushList();output.push(renderHeading(namuHeading[1].length,namuHeading[2]));continue;}
+    const legacyCommand=trimmed.match(/^(?:#(제목|소제목|강조|목록|인용|문서|링크|사진|영상|선)#?|\[(제목|소제목|강조|목록|인용|문서|링크|사진|영상|선)\])\s*(.*)$/);
+    if(legacyCommand){
+      const kind=legacyCommand[1]||legacyCommand[2],value=legacyCommand[3];
+      if(kind==="목록"){addListItem(0,"ul",value);continue;}
+      flushList();
+      if(kind==="제목"){output.push(renderHeading(2,value));continue;}
+      if(kind==="소제목"){output.push(renderHeading(3,value));continue;}
+      if(kind==="강조"){output.push(`<p class="wiki-callout">${inlineMarkdown(value,inlineContext)}</p>`);continue;}
+      if(kind==="인용"){output.push(`<blockquote class="wiki-quote">${inlineMarkdown(value,inlineContext)}</blockquote>`);continue;}
+      if(kind==="선"){output.push('<hr class="wiki-divider">');continue;}
+      if(kind==="문서"){const [target,label]=value.split("|").map(part=>part.trim());output.push(inlineMarkdown(`[[${target}${label?`|${label}`:""}]]`,inlineContext));continue;}
+      if(kind==="링크"){const [rawUrl,label]=value.split("|").map(part=>part.trim()),url=safeHttpUrl(rawUrl);output.push(url?`<p><a href="${esc(url)}" target="_blank" rel="noopener noreferrer">${esc(label||url)}</a></p>`:`<p>${esc(value)}</p>`);continue;}
+      if(kind==="사진"){const [rawUrl,caption]=value.split("|").map(part=>part.trim()),image=renderWikiImage(`${rawUrl}${caption?`|${caption}`:""}`);output.push(image||`<p>${esc(value)}</p>`);continue;}
+      if(kind==="영상"){const url=safeHttpUrl(value);output.push(url?`<p><a class="wiki-media-link" href="${esc(url)}" target="_blank" rel="noopener noreferrer">동영상 열기 ↗</a></p>`:`<p>${esc(value)}</p>`);continue;}
+    }
+    const namuList=line.match(/^(\s+)(\*+|\d+\.)\s+(.*)$/);
+    if(namuList){addListItem(Math.max(0,namuList[1].length-1),/^\d/.test(namuList[2])?"ol":"ul",namuList[3]);continue;}
+    if(/^\|\|/.test(trimmed)){
+      flushList();const rows=[];
+      while(lineIndex<lines.length&&/^\s*\|\|/.test(lines[lineIndex])){
+        const cells=lines[lineIndex].trim().replace(/^\|\|\s*/,"").replace(/\s*\|\|\s*$/,"").split(/\s*\|\|\s*/);
+        rows.push(`<tr>${cells.map(cell=>{let value=cell.trim(),align="",colspan=1;const a=value.match(/^<(\(|\)|:)>(?:\s*)/);if(a){align=a[1]==="("?"left":a[1]===")"?"right":"center";value=value.slice(a[0].length);}const span=value.match(/^<-([1-9]\d?)>\s*/);if(span){colspan=Math.min(20,Number(span[1]));value=value.slice(span[0].length);}return `<td${colspan>1?` colspan="${colspan}"`:""}${align?` class="align-${align}"`:""}>${inlineMarkdown(value,inlineContext)}</td>`;}).join("")}</tr>`);lineIndex++;
+      }
+      lineIndex--;output.push(`<div class="wiki-table-wrap"><table class="wiki-table"><tbody>${rows.join("")}</tbody></table></div>`);continue;
+    }
+    flushList();
+    if(/^----+$/.test(trimmed))output.push('<hr class="wiki-divider">');
+    else if(trimmed.startsWith("### "))output.push(renderHeading(3,trimmed.slice(4)));
+    else if(trimmed.startsWith("## "))output.push(renderHeading(2,trimmed.slice(3)));
+    else if(trimmed.startsWith("# "))output.push(renderHeading(2,trimmed.slice(2)));
+    else if(/^[-*] /.test(trimmed))addListItem(0,"ul",trimmed.slice(2));
+    else if(/^>\s?/.test(trimmed))output.push(`<blockquote class="wiki-quote">${inlineMarkdown(trimmed.replace(/^>\s?/,""),inlineContext)}</blockquote>`);
+    else if(trimmed==="[각주]")output.push(renderFootnotes(inlineContext));
+    else output.push(`<p>${inlineMarkdown(trimmed,inlineContext)}</p>`);
+  }
+  flushList();
+  if(inlineContext.footnotes.length&&!output.some(block=>block.includes('class="wiki-footnotes"')))output.push(renderFootnotes(inlineContext));
+  return output.join("");
+}
+function safeWikiColor(value){const color=String(value||"").trim();if(!/^[#a-zA-Z0-9(),.%\s]+$/.test(color))return "";try{return CSS.supports("color",color)?color:"";}catch{return /^#[\da-f]{3}(?:[\da-f]{3}|[\da-f]{5})?$/i.test(color)||/^[a-z]+$/i.test(color)?color:"";}}
+function renderWikiImage(value){const parts=String(value).split("|").map(part=>part.trim()),url=safeHttpUrl(parts.shift()||"");if(!url)return "";let caption="",width=0;for(const part of parts){const match=part.match(/^width\s*=\s*(\d{1,4})$/i);if(match)width=Math.max(60,Math.min(1200,Number(match[1])));else if(part)caption=part;}return `<figure class="wiki-image"><img src="${esc(url)}" alt="${esc(caption||"문서 사진")}" loading="lazy"${width?` width="${width}"`:""}>${caption?`<figcaption>${esc(caption)}</figcaption>`:""}</figure>`;}
+function inlineMarkdown(line,context={footnotes:[]}){
+  const tokens=[],stash=html=>`\uE000${tokens.push(html)-1}\uE001`;let source=String(line||"");
+  source=source.replace(/\[\[([^\]]+)\]\]/g,(whole,inside)=>{const [target,...labelParts]=inside.split("|"),label=labelParts.join("|").trim(),name=target.trim();if(name==="목차")return whole;if(/^분류\s*:/i.test(name))return "";if(/^파일\s*:/i.test(name)){const image=renderWikiImage(name.replace(/^파일\s*:/i,""));return image?stash(image):esc(whole);}const external=safeHttpUrl(name);if(external)return stash(`<a href="${esc(external)}" target="_blank" rel="noopener noreferrer">${esc(label||external)}</a>`);return stash(`<button type="button" class="wiki-inline-link" data-action="wiki-link" data-title="${esc(name)}">${esc(label||name)}</button>`);});
+  source=source.replace(/\[youtube\(([^)]+)\)\]/gi,(whole,id)=>{const videoId=id.trim().match(/^[A-Za-z0-9_-]{6,20}$/)?.[0];if(!videoId)return esc(whole);return stash(`<div class="wiki-video"><iframe src="https://www.youtube-nocookie.com/embed/${videoId}" title="YouTube 동영상" loading="lazy" referrerpolicy="strict-origin-when-cross-origin" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share" allowfullscreen></iframe></div>`);});
+  source=source.replace(/\[\*\s*([^\]]+)\]/g,(_,note)=>{const index=context.footnotes.push(note.trim());return stash(`<sup class="wiki-footnote-ref"><a id="wiki-footnote-ref-${index}" href="#wiki-footnote-${index}" aria-label="각주 ${index}">[${index}]</a></sup>`);});
+  let safe=esc(source);
+  safe=safe.replace(/\{\{\{\s*([+-][1-5])\s+([\s\S]+?)\}\}\}/g,(_,size,content)=>`<span class="wiki-size-${Math.abs(Number(size))}${size.startsWith("-")?" wiki-size-down":""}">${content}</span>`);
+  safe=safe.replace(/\{\{\{\s*#([^\s,{}]+)(?:,([^{}]+))?\s+([\s\S]+?)\}\}\}/g,(_,foreground,background,content)=>{const fg=safeWikiColor(foreground),bg=background?safeWikiColor(background):"";return fg||bg?`<span class="wiki-colored-text" style="${fg?`color:${esc(fg)};`:""}${bg?`background-color:${esc(bg)};`:""}">${content}</span>`:content;});
+  safe=safe.replace(/'''(.+?)'''/g,"<strong>$1</strong>").replace(/''(.+?)''/g,"<em>$1</em>").replace(/__(.+?)__/g,"<u>$1</u>").replace(/~~(.+?)~~|--(.+?)--/g,(_,a,b)=>`<del>${a||b}</del>`).replace(/\^\^(.+?)\^\^/g,"<sup>$1</sup>").replace(/,,(.+?),,/g,"<sub>$1</sub>").replace(/\*\*(.+?)\*\*/g,"<strong>$1</strong>").replace(/`([^`]+)`/g,"<code>$1</code>");
+  safe=safe.replace(/\[([^\]]+)\]\((https?:\/\/[^\s)]+)\)/g,'<a href="$2" target="_blank" rel="noopener noreferrer">$1</a>').replace(/(https?:\/\/[^\s<]+)/g,'<a href="$1" target="_blank" rel="noopener noreferrer" class="media-url">$1</a>');
+  return safe.replace(/\uE000(\d+)\uE001/g,(_,index)=>tokens[Number(index)]||"");
+}
+function renderFootnotes(context){if(!context.footnotes.length)return "";return `<section class="wiki-footnotes" aria-label="각주"><strong>각주</strong><ol>${context.footnotes.map((note,index)=>`<li id="wiki-footnote-${index+1}">${inlineMarkdown(note,{footnotes:[]})} <a class="wiki-footnote-back" href="#wiki-footnote-ref-${index+1}" aria-label="본문으로 돌아가기">↩</a></li>`).join("")}</ol></section>`;}
+function documentHeadings(text=""){
+  const headings=[];for(const rawLine of String(text).split(/\r?\n/)){const line=rawLine.trim(),custom=line.match(/^(?:#(제목|소제목)#?|\[(제목|소제목)\])\s*(.*)$/),tocHeading=line.match(/^(?:#목차#?|\[목차\])\s*(.+)$/),markdown=line.match(/^(#{1,3})\s+(.+)$/),namu=line.match(/^(={2,6})\s*(.*?)\s*\1\s*$/);if(custom){const kind=custom[1]||custom[2];headings.push({level:kind==="소제목"?3:2,title:custom[3].trim()||"제목 없음"});}else if(tocHeading)headings.push({level:2,title:tocHeading[1].trim()||"제목 없음"});else if(namu)headings.push({level:namu[1].length,title:namu[2].trim()||"제목 없음"});else if(markdown)headings.push({level:markdown[1].length===3?3:2,title:markdown[2].trim()});}
+  return headings.map((heading,index)=>({...heading,id:`doc-section-${index+1}`}));
+}
+function renderTocMarkup(headings=[]){if(!headings.length)return "";return `<nav class="article-toc article-toc-top" aria-label="문서 목차"><div class="toc-title">목차</div><div class="toc-items">${headings.map((heading,index)=>`<button type="button" class="toc-item${heading.level>2?` level-${heading.level}`:""}" data-action="toc-jump" data-heading-id="${heading.id}"><span class="toc-number">${index+1}</span><span>${esc(heading.title)}</span></button>`).join("")}</div></nav>`;}
+function renderEditor(){
+  const current=state.editorId?state.docs.find(d=>d.id===state.editorId):null,draft=state.editingDraft||{title:current?.title||"",category:current?.category||"",body:current?docEditorBody(current):""};
+  const chars=draft.body.length,imageCount=countImages(draft.body),videoCount=countVideos(draft.body),over=chars>state.config.chars||imageCount>state.config.images||videoCount>state.config.videos,near=chars>state.config.chars*.8;
+  const approvalInfo=!current?"새 문서는 관리자 승인 후 공개됩니다.":current?.editRestricted&&!state.isAdmin?"이 문서는 편집 제안을 제출하고 권한 있는 이용자의 승인을 받아야 반영됩니다.":"일반 문서는 작성자가 아니어도 학교 계정으로 편집할 수 있고 저장 즉시 반영됩니다.";
+  const grammar=`<p>나무위키에서 익숙한 기본 문법으로 작성할 수 있어요. 제목, 목차, 서식, 링크, 인용, 목록, 표, 각주와 미디어 문법을 지원합니다.</p><div class="editor-markup-grid"><span><code>== 제목 ==</code><small>문단 제목 (2~6단계)</small></span><span><code>[목차]</code><small>이 위치에 목차 표시</small></span><span><code>'''굵게''' · ''기울임''</code><small>글자 강조</small></span><span><code>__밑줄__ · ~~취소선~~</code><small>밑줄과 취소선</small></span><span><code>^^위첨자^^ · ,,아래첨자,,</code><small>위·아래 첨자</small></span><span><code>{{{+1 크게}}} · {{{-1 작게}}}</code><small>글자 크기 조절</small></span><span><code>{{{#red,#ff0 색상}}}</code><small>글자색과 배경색</small></span><span><code>[[문서명|표시 문구]]</code><small>위키 문서 연결</small></span><span><code>[[https://주소|표시 문구]]</code><small>외부 링크</small></span><span><code>&gt; 인용문</code><small>인용 블록</small></span><span><code>&nbsp;*&nbsp;목록 항목</code><small>앞에 공백을 둔 글머리 목록</small></span><span><code>|| 칸 1 || 칸 2 ||</code><small>표 한 행</small></span><span><code>[* 각주 내용] · [각주]</code><small>각주와 각주 목록 위치</small></span><span><code>[[파일:https://주소/사진.jpg|width=600]]</code><small>사진 링크 (직접 업로드는 미지원)</small></span><span><code>[youtube(동영상ID)]</code><small>YouTube 동영상 삽입</small></span><span><code>----</code><small>구분선</small></span></div><p class="editor-markup-note">외부 틀·위키 내부 파일 저장소·임의 HTML/CSS 실행은 지원하지 않아요. 기존 문서의 예전 작성 문법도 계속 표시됩니다. 기존 문서의 <code>## 제목</code>은 제목으로 표시됩니다.</p>`;
+  return `<div class="content-page"><div class="page-title-row"><div><p class="eyebrow">Write together</p><h1 class="page-title">${current?"문서 편집":"새 문서 만들기"}</h1><p class="page-subtitle">확인한 정보를 알기 쉽게 정리해 주세요.</p></div></div><form class="panel editor-panel" id="editorForm"><div class="admin-callout">${icons.shield}<span>${approvalInfo} 글자 <strong>${state.config.chars.toLocaleString()}자</strong>, 사진 링크 <strong>${state.config.images}개</strong>, 동영상 링크 <strong>${state.config.videos}개</strong> 제한을 넘긴 편집도 승인 후 반영됩니다.</span></div><div class="field"><label for="docTitle">문서 제목</label><input id="docTitle" name="title" required maxlength="80" placeholder="예: 동아리, 급식, 학교 행사" value="${esc(draft.title)}"></div><div class="field"><label for="docCategory">분류</label><select id="docCategory" name="category">${WIKI_CATEGORIES.map(category=>`<option value="${esc(category)}" ${draft.category===category?"selected":""}>${esc(category)}</option>`).join("")}</select></div><div class="field"><label for="docBody">본문</label><div class="editor-toolbar"><button type="button" data-action="insert-markup" data-markup="[[파일:https://주소/사진.jpg|width=600]]">사진 링크</button><button type="button" data-action="insert-markup" data-markup="[youtube(동영상ID)]">동영상 링크</button></div><details class="editor-markup-help"><summary>작성 문법 보기</summary><div class="editor-markup-content">${grammar}</div></details><textarea id="docBody" name="body" required placeholder="== 문서 제목 ==\n\n[목차]\n\n=== 소개 ===\n\n확인된 내용을 작성해 주세요.">${esc(draft.body)}</textarea><span class="field-hint">미디어는 링크로 삽입하며 파일을 직접 업로드하지 않습니다. 사람을 식별할 수 있는 사진·개인 정보는 올리지 마세요.</span></div><div class="limits-row"><span class="limit-chip">글자 <strong>${chars.toLocaleString()} / ${state.config.chars.toLocaleString()}</strong></span><span class="limit-chip">사진 <strong>${imageCount} / ${state.config.images}</strong></span><span class="limit-chip">동영상 <strong>${videoCount} / ${state.config.videos}</strong></span><span class="limit-count ${over?"over":near?"near":""}">${over?"관리자 승인 필요":near?"제한에 가까워요":"저장 공간 절약 모드"}</span></div><div class="editor-actions"><span class="editor-actions-left">문서는 저장 후 검색과 AI 답변에 반영됩니다.</span><div class="editor-actions-right"><button type="submit" class="button button-primary">${editorSubmitLabel(current,over)}</button></div></div></form></div>`;
+}
 
 loadLocal();
 if(location.hash.startsWith("#doc=")){const id=decodeURIComponent(location.hash.slice(5));if(getDoc(id))state.view="article",state.docId=id;}
