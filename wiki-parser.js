@@ -2,6 +2,9 @@
   const escapeHtml = value => String(value ?? "").replace(/[&<>"']/g, char => ({
     "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;"
   })[char]);
+  const escapeText = value => String(value ?? "").replace(/[&<>]/g, char => ({
+    "&": "&amp;", "<": "&lt;", ">": "&gt;"
+  })[char]);
   const safeUrl = value => {
     try {
       const url = new URL(String(value || "").trim());
@@ -329,7 +332,9 @@
       if (url && context.options.isPreview) return stash('<span class="wiki-preview-link">' + escapeHtml(urlText) + "</span>" + escapeHtml(tail));
       return url ? stash('<a href="' + escapeHtml(url) + '" target="_blank" rel="noopener noreferrer" class="media-url">' + escapeHtml(urlText) + "</a>" + escapeHtml(tail)) : raw;
     });
-    let safe = escapeHtml(source);
+    // Apostrophes are safe in text nodes; keep them intact so quote-based
+    // emphasis markup can be recognized after escaping HTML characters.
+    let safe = escapeText(source);
     safe = safe.replace(/'''([\s\S]+?)'''/g, "<strong>$1</strong>")
       .replace(/''([\s\S]+?)''/g, "<em>$1</em>")
       .replace(/__(.+?)__/g, "<u>$1</u>")
