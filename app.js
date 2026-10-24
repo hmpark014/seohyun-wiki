@@ -705,12 +705,13 @@ function renderTocMarkup(headings=[]) {
 }
 function renderArticle() {
   const doc=getDoc(state.docId);if(!doc){state.view="home";return renderHome();}
-  const toc=documentHeadings(doc.body);
-  const tocMarkup=renderTocMarkup(toc),hasInlineToc=/^\s*\[(?:목차|tableofcontents)(?:\(\s*hide\s*\))?\]\s*$/im.test(WikiParser.migrateBody(doc.body||""));
-  const mediaHtml=[...(doc.images||[]).map(url=>`<a class="media-card" href="${esc(url)}" target="_blank" rel="noopener noreferrer"><img src="${esc(url)}" alt="문서 첨부 이미지" loading="lazy"></a>`),...(doc.videos||[]).map(url=>`<a class="media-link" href="${esc(url)}" target="_blank" rel="noopener noreferrer">동영상 보기 ${icons.arrow}</a>`)].join("");
+  const inlineMedia=restoreLegacyMedia(doc.body,doc.images,doc.videos),body=inlineMedia.body;
+  const toc=documentHeadings(body);
+  const tocMarkup=renderTocMarkup(toc),hasInlineToc=/^\s*\[(?:목차|tableofcontents)(?:\(\s*hide\s*\))?\]\s*$/im.test(WikiParser.migrateBody(body));
+  const mediaHtml=[...(inlineMedia.images||[]).map(url=>`<a class="media-card" href="${esc(url)}" target="_blank" rel="noopener noreferrer"><img src="${esc(url)}" alt="문서 첨부 이미지" loading="lazy"></a>`),...(inlineMedia.videos||[]).map(url=>`<a class="media-link" href="${esc(url)}" target="_blank" rel="noopener noreferrer">동영상 보기 ${icons.arrow}</a>`)].join("");
   const restrictionBadge=doc.editRestricted?'<span class="tag">편집 제안 승인 필요</span>':'<span class="tag">학교 계정 누구나 편집 가능</span>';
   const restrictionAction=canManageEditRestrictions()?`<button class="button button-secondary" data-action="toggle-edit-restriction" data-id="${esc(doc.id)}">${doc.editRestricted?"편집 제한 해제":"편집 제한 설정"}</button>`:"";
-  return `<div class="content-page"><div class="article-layout"><article class="panel article-main"><div class="breadcrumbs"><button data-view="home">홈</button> › <button data-action="search-category" data-category="${esc(doc.category||"문서")}">${esc(doc.category||"문서")}</button></div><h1 class="article-title">${esc(doc.title)}</h1><div class="article-meta"><span>${esc(doc.author||"서현위키 이용자")}</span><span>·</span><span>최근 수정 ${nowLabel(doc.updatedAt||Date.now())}</span><span>·</span><span>조회 ${doc.views||0}</span>${doc.status==="hidden"?'<span class="tag">숨김 문서</span>':""}${doc.sample?'<span class="tag">예시 문서</span>':""}${restrictionBadge}</div>${hasInlineToc?"":tocMarkup}<div class="article-body">${markdownHtml(doc.body,toc.map(heading=>heading.id),tocMarkup)}${mediaHtml?`<div class="article-media">${mediaHtml}</div>`:""}</div><div class="article-side-actions"><button class="button button-secondary" data-action="edit-doc" data-id="${esc(doc.id)}">${state.user?(doc.editRestricted?"편집 제안":"문서 편집"):"로그인 후 편집"}</button>${restrictionAction}<button class="button button-secondary" data-action="report-doc" data-id="${esc(doc.id)}">신고</button>${canDeleteDocuments(doc)?`<button class="button button-danger" data-action="delete-doc" data-id="${esc(doc.id)}">문서 영구 삭제</button>`:""}</div></article></div></div>`;
+  return `<div class="content-page"><div class="article-layout"><article class="panel article-main"><div class="breadcrumbs"><button data-view="home">홈</button> › <button data-action="search-category" data-category="${esc(doc.category||"문서")}">${esc(doc.category||"문서")}</button></div><h1 class="article-title">${esc(doc.title)}</h1><div class="article-meta"><span>${esc(doc.author||"서현위키 이용자")}</span><span>·</span><span>최근 수정 ${nowLabel(doc.updatedAt||Date.now())}</span><span>·</span><span>조회 ${doc.views||0}</span>${doc.status==="hidden"?'<span class="tag">숨김 문서</span>':""}${doc.sample?'<span class="tag">예시 문서</span>':""}${restrictionBadge}</div>${hasInlineToc?"":tocMarkup}<div class="article-body">${markdownHtml(body,toc.map(heading=>heading.id),tocMarkup)}${mediaHtml?`<div class="article-media">${mediaHtml}</div>`:""}</div><div class="article-side-actions"><button class="button button-secondary" data-action="edit-doc" data-id="${esc(doc.id)}">${state.user?(doc.editRestricted?"편집 제안":"문서 편집"):"로그인 후 편집"}</button>${restrictionAction}<button class="button button-secondary" data-action="report-doc" data-id="${esc(doc.id)}">신고</button>${canDeleteDocuments(doc)?`<button class="button button-danger" data-action="delete-doc" data-id="${esc(doc.id)}">문서 영구 삭제</button>`:""}</div></article></div></div>`;
 }
 function renderSearch() {
   const query=String(state.query||"").trim();
@@ -1230,7 +1231,7 @@ async function saveEditor(form) {
   const images=countImages(body),videos=countVideos(body),chars=body.length;
   const exceeded=chars>state.config.chars||images>state.config.images||videos>state.config.videos;
   const media=extractMedia(body),cleanBody=stripMedia(body);
-  const doc={id:existing?.id||slugify(title),title,category,summary:cleanBody.replace(/^#+.*$/gm,"").trim().slice(0,160),body:cleanBody,images:media.images,videos:media.videos,views:existing?.views||0,updatedAt:Date.now(),author:existing?.author||state.user?.displayName||"이용자",authorUid:existing?.authorUid||state.user?.uid||null,editRestricted:Boolean(existing?.editRestricted),status:existing?.status||"published",sample:false};
+  const doc={id:existing?.id||slugify(title),title,category,summary:cleanBody.replace(/^#+.*$/gm,"").trim().slice(0,160),body,images:media.images,videos:media.videos,views:existing?.views||0,updatedAt:Date.now(),author:existing?.author||state.user?.displayName||"이용자",authorUid:existing?.authorUid||state.user?.uid||null,editRestricted:Boolean(existing?.editRestricted),status:existing?.status||"published",sample:false};
   const duplicate=state.docs.some(d=>d.id===doc.id&&d.id!==state.editorId);
   if(duplicate){doc.id=`${doc.id}-${Math.random().toString(36).slice(2,6)}`;}
   if(!existing) { await requestLimitApproval(doc,{chars,images,videos},"새 문서 공개 승인 요청");return; }
@@ -1250,12 +1251,41 @@ function extractMedia(text="") {
   for(const match of text.matchAll(videoRegex))if(!videos.includes(match[0]))videos.push(match[0]);
   return {images,videos};
 }
+function mediaUrlIsInline(body,url,type) {
+  const text=String(body||"");
+  if(text.includes(url))return true;
+  if(type!=="video")return false;
+  const parsed=safeHttpUrl(url),match=parsed?.match(/(?:youtube\.com\/(?:watch\?v=|embed\/)|youtu\.be\/|vimeo\.com\/)([A-Za-z0-9_-]{5,20})/i);
+  if(!match)return false;
+  const id=match[1].replace(/[.*+?^${}()|[\]\\]/g,"\\$&");
+  return new RegExp("\\[(?:youtube|vimeo)\\(\\s*"+id+"(?:,|\\))","i").test(text);
+}
+function restoreLegacyMedia(body="",images=[],videos=[]) {
+  let restored=String(body||"");
+  const pendingImages=(images||[]).filter(url=>url&&!mediaUrlIsInline(restored,url,"image"));
+  const pendingVideos=(videos||[]).filter(url=>url&&!mediaUrlIsInline(restored,url,"video"));
+  let imageIndex=0,videoIndex=0;
+  restored=restored.replace(/\[사진 링크\]/gi,(placeholder,offset)=>{
+    const url=pendingImages[imageIndex++];if(!url)return placeholder;
+    const lineStart=restored.lastIndexOf("\n",offset)+1,prefix=restored.slice(lineStart,offset);
+    return prefix.includes("#사진#")||prefix.includes("[[파일:")?url:`[[파일:${url}|alt=사진]]`;
+  });
+  restored=restored.replace(/\[동영상 링크\]/gi,(placeholder,offset)=>{
+    const url=pendingVideos[videoIndex++];if(!url)return placeholder;
+    const lineStart=restored.lastIndexOf("\n",offset)+1,prefix=restored.slice(lineStart,offset);
+    if(prefix.includes("#영상#"))return url;
+    const parsed=safeHttpUrl(url),match=parsed?.match(/(?:youtube\.com\/(?:watch\?v=|embed\/)|youtu\.be\/)([A-Za-z0-9_-]{6,20})/i);
+    if(match)return "[youtube("+match[1]+")]";
+    const vimeo=parsed?.match(/vimeo\.com\/(\d{5,12})/i);
+    return vimeo?"[vimeo("+vimeo[1]+")]":url;
+  });
+  return {body:restored,images:pendingImages.slice(imageIndex),videos:pendingVideos.slice(videoIndex)};
+}
 function stripMedia(text="") {
   return text.replace(/!\[[^\]]*\]\(https?:\/\/[^\s)]+\)/gi,"[사진 링크]")
     .replace(/\bhttps?:\/\/[^\s)]+\.(?:png|jpe?g|gif|webp)(?:\?[^\s)]*)?/gi,"[사진 링크]")
     .replace(/https?:\/\/(?:www\.)?(?:youtube\.com\/watch\?v=[\w-]+|youtu\.be\/[\w-]+|vimeo\.com\/\d+)/gi,"[동영상 링크]");
 }
-function docEditorBody(doc) { return `${doc.body||""}${(doc.images||[]).map(url=>`\n\n![사진](${url})`).join("")}${(doc.videos||[]).map(url=>`\n\n${url}`).join("")}`; }
 async function persistDoc(doc) {
   const index=state.docs.findIndex(d=>d.id===doc.id),existing=index>=0?state.docs[index]:null;
   if(state.firebase){try{await cloudWriteDoc(doc);}catch(error){console.error("Firebase 문서 저장 실패:",error);toast("Firebase에 저장하지 못했어요. 로그인과 Firestore 규칙을 확인해 주세요.");return false;}}
@@ -1440,6 +1470,9 @@ document.addEventListener("submit",event=>{
     catch{toast(type==="video"?"공개된 YouTube 또는 Vimeo 주소를 입력해 주세요.":"http 또는 https로 시작하는 공개 주소를 입력해 주세요.");return;}
     state.editorId=null;state.editingDraft={title:"",category:"",body:type==="image"?`![${alt.replace(/[\[\]]/g,"")}](${url})`:url};navigate("editor");toast("파일 주소를 문서 편집기에 넣었어요. 제목과 분류를 고른 뒤 저장해 주세요.");
   }
+});
+document.addEventListener("mousedown",event=>{
+  if(event.target.closest("#editorForm [data-action='insert-markup'], #editorForm [data-action='editor-format']"))event.preventDefault();
 });
 document.addEventListener("click",async event=>{
   const target=event.target.closest("[data-action],[data-view]");if(!target)return;
@@ -1746,9 +1779,13 @@ function renderEditor(){
 
 
 function docEditorBody(doc){
-  const images=(doc.images||[]).map(url=>"\n\n[[파일:"+url+"|alt=사진]]").join("");
-  const videos=(doc.videos||[]).map(url=>{const parsed=safeHttpUrl(url),id=parsed?.match(/(?:youtube\.com\/watch\?v=|youtu\.be\/)([A-Za-z0-9_-]{6,20})/)?.[1];return id?"\n\n[youtube("+id+")]":"\n\n"+url;}).join("");
-  return WikiParser.migrateBody(doc.body||"")+images+videos;
+  const media=restoreLegacyMedia(WikiParser.migrateBody(doc.body||""),doc.images,doc.videos);
+  const images=media.images.map(url=>"\n\n[[파일:"+url+"|alt=사진]]").join("");
+  const videos=media.videos.map(url=>{
+    const parsed=safeHttpUrl(url),youtube=parsed?.match(/(?:youtube\.com\/(?:watch\?v=|embed\/)|youtu\.be\/)([A-Za-z0-9_-]{6,20})/)?.[1],vimeo=parsed?.match(/vimeo\.com\/(\d{5,12})/)?.[1];
+    return youtube?"\n\n[youtube("+youtube+")]":vimeo?"\n\n[vimeo("+vimeo+")]":"\n\n"+url;
+  }).join("");
+  return media.body+images+videos;
 }
 function markdownHtml(text="",headingIds=null,tocMarkup=null,options={}){return WikiParser.markdownHtml(text,headingIds,tocMarkup,{docs:liveDocs(),...options});}
 function inlineMarkdown(line,context={}){return WikiParser.inlineMarkdown(line,{...context,headings:context.headings||documentHeadings(getDoc(state.docId)?.body||""),docs:liveDocs()});}
