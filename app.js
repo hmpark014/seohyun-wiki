@@ -205,8 +205,8 @@ function watchMaintenanceMode(){
     render();
   });
 }
-function renderMaintenancePage(checking=false){
-  return `<section class="maintenance-page" role="status" aria-live="polite"><div class="maintenance-card"><span class="maintenance-mark" aria-hidden="true">${icons.settings}</span><p class="maintenance-eyebrow">SEOHYEON WIKI</p><h1>${checking?"서비스 상태를 확인하고 있어요":"서버 점검 중입니다"}</h1><p class="maintenance-copy">${checking?"운영 상태를 확인하고 있습니다. 잠시만 기다려 주세요.":esc(state.maintenance.message||"더 안정적인 서비스를 위해 점검을 진행하고 있어요. 잠시 후 다시 방문해 주세요.")}</p>${checking?"":`<p class="maintenance-note">점검이 끝나면 서현위키를 다시 이용하실 수 있습니다.</p>`}</div></section>`;
+function renderMaintenancePage(){
+  return `<section class="maintenance-page" role="status" aria-live="polite"><div class="maintenance-card"><span class="maintenance-mark" aria-hidden="true">${icons.settings}</span><p class="maintenance-eyebrow">SEOHYEON WIKI</p><h1>서버 점검 중입니다</h1><p class="maintenance-copy">${esc(state.maintenance.message||"더 안정적인 서비스를 위해 점검을 진행하고 있어요. 잠시 후 다시 방문해 주세요.")}</p><p class="maintenance-note">점검이 끝나면 서현위키를 다시 이용하실 수 있습니다.</p></div></section>`;
 }
 async function saveMaintenanceMode(enabled){
   if(!state.isAdmin||!state.firebase){toast("Firebase에 연결된 관리자 계정만 운영 점검을 변경할 수 있어요.");return;}
@@ -450,11 +450,11 @@ function render() {
   document.body.classList.toggle("dark",localStorage.getItem("seohyeonwiki.theme")==="dark");
   applyPreferences();
   syncThemeButton();
-  const maintenanceBlocked=!state.isAdmin&&(!state.maintenanceStatusLoaded||state.maintenance.enabled);
+  const maintenanceBlocked=!state.isAdmin&&state.maintenance.enabled;
   document.body.classList.toggle("maintenance-mode",maintenanceBlocked);
   if(maintenanceBlocked){
     modalWrap.hidden=true;document.body.style.overflow="";document.body.style.paddingRight="";
-    main.innerHTML=renderMaintenancePage(!state.maintenanceStatusLoaded);
+    main.innerHTML=renderMaintenancePage();
     return;
   }
   if(state.view==="editor"&&!state.user){
