@@ -35,7 +35,6 @@
       if (property === "background") property = "background-color";
       if (["color", "background-color", "border-color"].includes(property)) safe = safeColor(value);
       else if (property === "text-align" && /^(left|center|right|justify)$/i.test(value)) safe = value.toLowerCase();
-      else if (property === "font-style" && /^(normal|italic|oblique)$/i.test(value)) safe = value.toLowerCase();
       else if (property === "text-decoration" && /^(none|underline|line-through)$/i.test(value)) safe = value.toLowerCase();
       else if (property === "display" && /^(block|inline|inline-block)$/i.test(value)) safe = value.toLowerCase();
       else if (property === "float" && /^(left|right)$/i.test(value)) safe = value.toLowerCase();
@@ -73,7 +72,7 @@
   }
   const slug = value => String(value || "").normalize("NFKC").toLowerCase()
     .replace(/[^a-z0-9가-힣]+/g, "-").replace(/^-+|-+$/g, "").slice(0, 70) || "section";
-  const plainText = value => String(value || "").replace(/'''|''|__|~~|--|\^\^|,,/g, "").replace(/\{\{\{[^}]*\}\}\}/g, "").trim();
+  const plainText = value => String(value || "").replace(/'''|__|~~|--|\^\^|,,/g, "").replace(/\{\{\{[^}]*\}\}\}/g, "").trim();
   const parseHeading = line => {
     const match = String(line || "").trim().match(/^(={1,6})\s*(.*?)\s*\1\s*$/);
     return match ? { level: Math.min(6, match[1].length + 1), title: plainText(match[2]) || "제목 없음" } : null;
@@ -332,11 +331,10 @@
       if (url && context.options.isPreview) return stash('<span class="wiki-preview-link">' + escapeHtml(urlText) + "</span>" + escapeHtml(tail));
       return url ? stash('<a href="' + escapeHtml(url) + '" target="_blank" rel="noopener noreferrer" class="media-url">' + escapeHtml(urlText) + "</a>" + escapeHtml(tail)) : raw;
     });
-    // Apostrophes are safe in text nodes; keep them intact so quote-based
-    // emphasis markup can be recognized after escaping HTML characters.
+    // Apostrophes are safe in text nodes; keep them intact so bold markup can
+    // be recognized after escaping HTML characters.
     let safe = escapeText(source);
     safe = safe.replace(/'''([\s\S]+?)'''/g, "<strong>$1</strong>")
-      .replace(/''([\s\S]+?)''/g, "<em>$1</em>")
       .replace(/__(.+?)__/g, "<u>$1</u>")
       .replace(/~~([\s\S]+?)~~|--([\s\S]+?)--/g, (_, a, b) => "<del>" + (a || b) + "</del>")
       .replace(/\^\^([\s\S]+?)\^\^/g, "<sup>$1</sup>")
@@ -573,7 +571,6 @@
       ]},
       { title: "글자 서식", items: [
         ["'''굵게'''", "굵은 글자", "'''텍스트'''", "텍스트"],
-        ["''기울임''", "기울인 글자", "''텍스트''", "텍스트"],
         ["__밑줄__", "밑줄", "__텍스트__", "텍스트"],
         ["~~취소선~~ · --취소선--", "두 방식 모두 취소선", "~~텍스트~~", "텍스트"],
         ["^^위첨자^^ · ,,아래첨자,,", "위첨자와 아래첨자", "^^텍스트^^", "텍스트"],

@@ -1698,7 +1698,7 @@ function inlineMarkdown(line,context={footnotes:[]}){
   let safe=esc(source);
   safe=safe.replace(/\{\{\{\s*([+-][1-5])\s+([\s\S]+?)\}\}\}/g,(_,size,content)=>`<span class="wiki-size-${Math.abs(Number(size))}${size.startsWith("-")?" wiki-size-down":""}">${content}</span>`);
   safe=safe.replace(/\{\{\{\s*#([^\s,{}]+)(?:,([^,{}\s]+))?\s+([\s\S]+?)\}\}\}/g,(_,foreground,background,content)=>{const fg=safeWikiColor(foreground),bg=background?safeWikiColor(background):"";return fg||bg?`<span class="wiki-colored-text" style="${fg?`color:${esc(fg)};`:""}${bg?`background-color:${esc(bg)};`:""}">${content}</span>`:content;});
-  safe=safe.replace(/'''(.+?)'''/g,"<strong>$1</strong>").replace(/''(.+?)''/g,"<em>$1</em>").replace(/__(.+?)__/g,"<u>$1</u>").replace(/~~(.+?)~~|--(.+?)--/g,(_,a,b)=>`<del>${a||b}</del>`).replace(/\^\^(.+?)\^\^/g,"<sup>$1</sup>").replace(/,,(.+?),,/g,"<sub>$1</sub>").replace(/\*\*(.+?)\*\*/g,"<strong>$1</strong>").replace(/`([^`]+)`/g,"<code>$1</code>");
+  safe=safe.replace(/(?:&#39;){3}(.+?)(?:&#39;){3}/g,"<strong>$1</strong>").replace(/__(.+?)__/g,"<u>$1</u>").replace(/~~(.+?)~~|--(.+?)--/g,(_,a,b)=>`<del>${a||b}</del>`).replace(/\^\^(.+?)\^\^/g,"<sup>$1</sup>").replace(/,,(.+?),,/g,"<sub>$1</sub>").replace(/\*\*(.+?)\*\*/g,"<strong>$1</strong>").replace(/`([^`]+)`/g,"<code>$1</code>");
   safe=safe.replace(/\[([^\]]+)\]\((https?:\/\/[^\s)]+)\)/g,'<a href="$2" target="_blank" rel="noopener noreferrer">$1</a>').replace(/(https?:\/\/[^\s<]+)/g,'<a href="$1" target="_blank" rel="noopener noreferrer" class="media-url">$1</a>');
   return safe.replace(/\uE000(\d+)\uE001/g,(_,index)=>tokens[Number(index)]||"");
 }
@@ -1719,7 +1719,6 @@ function renderEditor(){
     <div class="field"><label for="docBody">본문</label>
       <div class="editor-toolbar editor-toolbar-rich" role="toolbar" aria-label="빠른 문서 서식">
         <button type="button" data-action="editor-format" data-before="'''" data-after="'''" data-placeholder="굵게">굵게</button>
-        <button type="button" data-action="editor-format" data-before="''" data-after="''" data-placeholder="기울임">기울임</button>
         <button type="button" data-action="editor-format" data-before="__" data-after="__" data-placeholder="밑줄">밑줄</button>
         <button type="button" data-action="editor-format" data-before="~~" data-after="~~" data-placeholder="취소선">취소선</button>
         <span class="editor-toolbar-separator" aria-hidden="true"></span>
