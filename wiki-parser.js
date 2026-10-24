@@ -14,6 +14,60 @@
     try { return CSS.supports("color", color) ? color : ""; }
     catch { return /^#[\da-f]{3}(?:[\da-f]{3}|[\da-f]{5})?$/i.test(color) || /^[a-z]+$/i.test(color) ? color : ""; }
   };
+  const safeStyleLength = value => {
+    const text = String(value || "").trim().toLowerCase();
+    if (text === "auto" || text === "0") return text;
+    const match = text.match(/^(-?\d{1,4}(?:\.\d{1,2})?)(px|em|rem|%|vw|vh)$/);
+    if (!match || Math.abs(Number(match[1])) > 1600) return "";
+    return text;
+  };
+  function safeWikiStyle(raw) {
+    const styles = [];
+    for (const declaration of String(raw || "").split(";")) {
+      const colon = declaration.indexOf(":");
+      if (colon < 1) continue;
+      let property = declaration.slice(0, colon).trim().toLowerCase();
+      const value = declaration.slice(colon + 1).trim();
+      let safe = "";
+      if (property === "background") property = "background-color";
+      if (["color", "background-color", "border-color"].includes(property)) safe = safeColor(value);
+      else if (property === "text-align" && /^(left|center|right|justify)$/i.test(value)) safe = value.toLowerCase();
+      else if (property === "font-style" && /^(normal|italic|oblique)$/i.test(value)) safe = value.toLowerCase();
+      else if (property === "text-decoration" && /^(none|underline|line-through)$/i.test(value)) safe = value.toLowerCase();
+      else if (property === "display" && /^(block|inline|inline-block)$/i.test(value)) safe = value.toLowerCase();
+      else if (property === "float" && /^(left|right)$/i.test(value)) safe = value.toLowerCase();
+      else if (property === "clear" && /^(left|right|both|none)$/i.test(value)) safe = value.toLowerCase();
+      else if (property === "vertical-align" && /^(top|middle|bottom|baseline)$/i.test(value)) safe = value.toLowerCase();
+      else if (property === "font-weight" && /^(normal|bold|[1-9]00)$/i.test(value)) safe = value.toLowerCase();
+      else if (property === "font-size") {
+        const length = safeStyleLength(value);
+        if (length && !length.startsWith("-")) safe = length;
+      } else if (["width", "max-width", "min-width", "height", "min-height", "max-height", "border-radius"].includes(property)) {
+        const length = safeStyleLength(value);
+        if (length && !length.startsWith("-")) safe = length;
+      } else if (["padding", "padding-top", "padding-right", "padding-bottom", "padding-left", "margin", "margin-top", "margin-right", "margin-bottom", "margin-left"].includes(property)) {
+        const values = value.split(/\s+/);
+        const lengths = values.map(item => safeStyleLength(item));
+        if (values.length <= 4 && lengths.every(Boolean)) safe = lengths.join(" ");
+      } else if (property === "border") {
+        const match = value.match(/^(\d{1,2}px)\s+(solid|dashed|dotted)\s+(.+)$/i);
+        const color = match && safeColor(match[3]);
+        if (match && color) safe = match[1] + " " + match[2].toLowerCase() + " " + color;
+      } else if (property === "line-height") {
+        const match = value.match(/^(\d{1,2}(?:\.\d{1,2})?)(px|em|rem|%)?$/i);
+        if (match && Number(match[1]) > 0 && Number(match[1]) <= 5) safe = value;
+      } else if (property === "word-break" && /^(normal|break-all|keep-all)$/i.test(value)) safe = value.toLowerCase();
+      if (safe) styles.push(property + ":" + safe);
+    }
+    return styles.join(";");
+  }
+  function themeColorStyles(property, raw) {
+    const colors = String(raw || "").split(",").map(value => safeColor(value.trim()));
+    if (!colors[0] || colors.length > 2) return "";
+    const stem = property === "background-color" ? "wiki-bg" : property === "border-color" ? "wiki-border" : "wiki-text";
+    return "--" + stem + "-light:" + colors[0] + ";" + (colors[1] ? "--" + stem + "-dark:" + colors[1] + ";" : "") +
+      (property === "border-color" ? "--wiki-table-border-light:" + colors[0] + ";" + (colors[1] ? "--wiki-table-border-dark:" + colors[1] + ";" : "") : "");
+  }
   const slug = value => String(value || "").normalize("NFKC").toLowerCase()
     .replace(/[^a-z0-9가-힣]+/g, "-").replace(/^-+|-+$/g, "").slice(0, 70) || "section";
   const plainText = value => String(value || "").replace(/'''|''|__|~~|--|\^\^|,,/g, "").replace(/\{\{\{[^}]*\}\}\}/g, "").trim();
@@ -24,6 +78,7 @@
   function migrateBody(text) {
     return String(text || "").split(/\r?\n/).map(raw => {
       const line = raw.trim();
+      if (line.startsWith("##")) return raw;
       let match = line.match(/^(?:#목차#?|\[목차\])\s*(.*)$/);
       if (match) return match[1] ? "== " + match[1].trim() + " ==" : "[목차]";
       match = line.match(/^(?:#(제목|소제목|강조|목록|인용|문서|링크|사진|영상|선)#?|\[(제목|소제목|강조|목록|인용|문서|링크|사진|영상|선)\])\s*(.*)$/);
@@ -71,6 +126,19 @@
     }
     return headings.map((heading, index) => ({ ...heading, id: "doc-section-" + (index + 1) + "-" + slug(heading.title) }));
   }
+  function findSectionHeading(headings, section) {
+    const match = String(section || "").trim().match(/^s-(\d+(?:[.-]\d+)*)$/i);
+    if (!match) return headings.find(item => slug(item.title) === slug(section) || item.title === section) || null;
+    const wanted = match[1].split(/[.-]/).map(Number), counters = [0, 0, 0, 0, 0, 0, 0];
+    for (const heading of headings) {
+      const level = Math.max(2, Math.min(6, heading.level || 2));
+      counters[level]++;
+      for (let deeper = level + 1; deeper <= 6; deeper++) counters[deeper] = 0;
+      const path = counters.slice(2, level + 1);
+      if (path.length === wanted.length && path.every((part, index) => part === wanted[index])) return heading;
+    }
+    return null;
+  }
   function buildFootnotes(text) {
     const notes = [], named = new Map();
     const entries = migrateBody(text).match(/\[\*[^\]]+\]/g) || [];
@@ -93,13 +161,15 @@
     return { notes, named };
   }
   const makeContext = (text, headings, options = {}) => ({
-    notes: buildFootnotes(text), headings, options, footnoteRefCount: new Map(), unnamedFootnoteCursor: 0, includeDepth: 0
+    notes: buildFootnotes(text), headings, options, footnoteRefCount: new Map(), printedFootnotes: new Set(), unnamedFootnoteCursor: 0, includeDepth: 0
   });
   function renderFootnotes(context) {
-    const notes = context.notes.notes;
+    const notes = context.notes.notes.map((note, index) => ({ note, index })).filter(({ index }) =>
+      context.footnoteRefCount.has(index + 1) && !context.printedFootnotes.has(index));
     if (!notes.length) return "";
     return '<section class="wiki-footnotes" aria-label="각주"><strong>각주</strong><ol>' +
-      notes.map((note, index) => {
+      notes.map(({ note, index }) => {
+        context.printedFootnotes.add(index);
         const firstRef = "wiki-footnote-ref-" + (index + 1) + "-1";
         return '<li id="wiki-footnote-' + (index + 1) + '">' + renderInline(note.text, context) +
           ' <a class="wiki-footnote-back" href="#' + firstRef + '" aria-label="본문으로 돌아가기">↩</a></li>';
@@ -109,18 +179,20 @@
     const parts = String(value || "").split("|").map(part => part.trim());
     const url = safeUrl(parts.shift());
     if (!url) return "";
-    let caption = "", width = "", height = "", align = "", borderRadius = "";
-    for (const part of parts) {
+    let caption = "", width = "", height = "", align = "", borderRadius = "", objectFit = "";
+    const options = parts.flatMap(part => part.split("&").map(option => option.trim()));
+    for (const part of options) {
       let match;
       if ((match = part.match(/^width\s*=\s*(\d{1,4})$/i))) width = Math.max(40, Math.min(1600, Number(match[1]))) + "px";
       else if ((match = part.match(/^height\s*=\s*(\d{1,4})$/i))) height = Math.max(40, Math.min(1200, Number(match[1]))) + "px";
       else if ((match = part.match(/^align\s*=\s*(left|center|right)$/i))) align = match[1].toLowerCase();
       else if ((match = part.match(/^border-radius\s*=\s*(\d{1,2})$/i))) borderRadius = Math.min(32, Number(match[1])) + "px";
+      else if ((match = part.match(/^object-fit\s*=\s*(contain|cover|fill|none|scale-down)$/i))) objectFit = match[1].toLowerCase();
       else if (/^alt\s*=/i.test(part)) caption = part.replace(/^alt\s*=\s*/i, "");
-      else if (part && !/^(?:link|theme|#!)/i.test(part)) caption = part;
+      else if (part && !part.includes("=") && !/^(?:link|theme|#!)/i.test(part) && !caption) caption = part;
     }
     const style = (width ? "width:" + width + ";" : "") + (height ? "height:" + height + ";" : "") +
-      (borderRadius ? "border-radius:" + borderRadius + ";" : "");
+      (borderRadius ? "border-radius:" + borderRadius + ";" : "") + (objectFit ? "object-fit:" + objectFit + ";" : "");
     return '<figure class="wiki-image' + (align ? " align-" + align : "") + '"><img src="' + escapeHtml(url) +
       '" alt="' + escapeHtml(caption || "문서 사진") + '" loading="lazy" decoding="async"' +
       (style ? ' style="' + style + '"' : "") + '>' +
@@ -134,6 +206,10 @@
       src = "https://www.youtube-nocookie.com/embed/" + id; title = "YouTube 동영상";
     } else if (/^vimeo$/i.test(platform) && /^\d{5,12}$/.test(id)) {
       src = "https://player.vimeo.com/video/" + id; title = "Vimeo 동영상";
+    } else if (/^nicovideo$/i.test(platform) && /^(?:sm|nm|so)\d{1,12}$/.test(id)) {
+      src = "https://embed.nicovideo.jp/watch/" + encodeURIComponent(id); title = "니코니코 동영상";
+    } else if (/^navertv$/i.test(platform) && /^\d{5,12}$/.test(id)) {
+      src = "https://tv.naver.com/embed/v/" + encodeURIComponent(id); title = "네이버TV 동영상";
     } else return "";
     return '<div class="wiki-video"><iframe src="' + escapeHtml(src) + '" title="' + title +
       '" loading="lazy" referrerpolicy="strict-origin-when-cross-origin" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share" allowfullscreen></iframe></div>';
@@ -143,13 +219,15 @@
     if (/^분류\s*:/i.test(name)) return '<span class="wiki-category">' + escapeHtml(name.replace(/^분류\s*:/i, "").trim()) + "</span>";
     if (/^파일\s*:/i.test(name)) return imageMarkup(name.replace(/^파일\s*:/i, ""));
     if (name === "목차") return "";
+    if (context.options.isPreview) return '<span class="wiki-preview-link">' + escapeHtml(label || name) + "</span>";
     if (/^https?:\/\//i.test(name)) {
       const url = safeUrl(name);
+      if (context.options.isPreview) return '<span class="wiki-preview-link">' + escapeHtml(label || name) + "</span>";
       return url ? '<a href="' + escapeHtml(url) + '" target="_blank" rel="noopener noreferrer">' + escapeHtml(label || url) + "</a>" : escapeHtml(label || name);
     }
     if (/^#/.test(name)) {
       const section = name.slice(1).trim();
-      const heading = context.headings.find(item => slug(item.title) === slug(section) || item.title === section);
+      const heading = findSectionHeading(context.headings, section);
       const id = heading?.id || "wiki-anchor-" + slug(section);
       return '<a class="wiki-section-link" href="#' + id + '" data-action="toc-jump" data-heading-id="' + id + '">' + escapeHtml(label || section) + "</a>";
     }
@@ -174,15 +252,16 @@
     source = source.replace(/\{\{\{\s*([+-][1-5])\s+([\s\S]+?)\}\}\}/g, (_, amount, content) =>
       stash('<span class="wiki-size-' + Math.abs(Number(amount)) + (amount.startsWith("-") ? " wiki-size-down" : "") + '">' + renderInline(content, context) + "</span>"));
     source = source.replace(/\{\{\{([\s\S]+?)\}\}\}/g, (_, literal) => stash('<code class="wiki-inline-code">' + escapeHtml(literal) + "</code>"));
-    source = source.replace(/\[\[include\(([^)]+)\)\]\]/gi, (_, title) => {
+    source = source.replace(/\[\[?include\(([^)]+)\)\]\]?/gi, (_, title) => {
       const name = title.trim();
       const docs = context.options.docs || [];
       const doc = docs.find(item => String(item.title).toLowerCase() === name.toLowerCase());
       if (!doc || context.includeDepth > 0) return stash(internalLink(name, "문서 포함: " + name, context));
-      const excerpt = String(doc.summary || doc.body || "").split(/\r?\n/).filter(line => line.trim() && !parseHeading(line)).slice(0, 4).join(" ");
-      return stash('<section class="wiki-include"><div class="wiki-include-title">' + escapeHtml(name) + "</div><p>" +
-        renderInline(excerpt.slice(0, 500), { ...context, includeDepth: context.includeDepth + 1 }) +
-        '</p><button type="button" class="wiki-inline-link" data-action="wiki-link" data-title="' + escapeHtml(name) + '">문서 열기</button></section>');
+      const includedBody = String(doc.body || doc.summary || "");
+      const includeContext = { ...context, headings: documentHeadings(includedBody).map(heading => ({ ...heading, id: "include-" + slug(name) + "-" + heading.id })), includeDepth: context.includeDepth + 1 };
+      return stash('<section class="wiki-include"><div class="wiki-include-title">' + escapeHtml(name) +
+        '</div><div class="wiki-include-body">' + renderBlocks(includedBody, includeContext, { headingIndex: 0 }) +
+        '</div><button type="button" class="wiki-inline-link" data-action="wiki-link" data-title="' + escapeHtml(name) + '">문서 열기</button></section>');
     });
     source = source.replace(/\[\[anchor\(([^)]+)\)\]\]/gi, (_, anchor) => stash('<span id="wiki-anchor-' + slug(anchor) + '" class="wiki-anchor"></span>'));
     source = source.replace(/\[\[([\s\S]+?)\]\]/g, (_, inside) => {
@@ -190,17 +269,40 @@
       const html = internalLink(target, labels.join("|").trim(), context);
       return stash(html || "");
     });
-    source = source.replace(/\[(youtube|vimeo)\(([^)]*)\)\]/gi, (_, platform, data) => stash(videoMarkup(platform, data) || escapeHtml("[" + platform + "(" + data + ")]")));
+    source = source.replace(/\[(youtube|vimeo|nicovideo|navertv)\(([^)]*)\)\]/gi, (_, platform, data) => stash(videoMarkup(platform, data) || escapeHtml("[" + platform + "(" + data + ")]")));
+    source = source.replace(/\[ruby\(([^,\]]+),([^\]]+)\)\]/gi, (_, base, reading) =>
+      stash("<ruby>" + escapeHtml(base.trim()) + "<rp>(</rp><rt>" + escapeHtml(reading.trim()) + "</rt><rp>)</rp></ruby>"));
+    source = source.replace(/\[(https?:\/\/[^\s\]]+)(?:\s+([^\]]+))?\]/gi, (_, rawUrl, label) => {
+      const url = safeUrl(rawUrl);
+      if (context.options.isPreview) return stash('<span class="wiki-preview-link">' + escapeHtml(label || rawUrl) + "</span>");
+      return stash(url ? '<a href="' + escapeHtml(url) + '" target="_blank" rel="noopener noreferrer">' + escapeHtml(label || url) + "</a>" : escapeHtml("[" + rawUrl + (label ? " " + label : "") + "]"));
+    });
     source = source.replace(/\[anchor\(([^)]+)\)\]/gi, (_, anchor) => {
       const id = "wiki-anchor-" + slug(anchor);
       return stash('<span id="' + id + '" class="wiki-anchor"></span>');
     });
     source = source.replace(/\[br\]/gi, () => stash("<br>"));
-    source = source.replace(/(\[date\]|\[datetime\])/gi, whole => stash(escapeHtml(new Intl.DateTimeFormat("ko-KR", whole.toLowerCase() === "[date]" ? { dateStyle: "long" } : { dateStyle: "long", timeStyle: "short" }).format(new Date()))));
+    source = source.replace(/(\[date\]|\[datetime\])/gi, whole => {
+      const now = new Date();
+      const date = new Intl.DateTimeFormat("sv-SE", { timeZone: "Asia/Seoul", year: "numeric", month: "2-digit", day: "2-digit" }).format(now);
+      const time = new Intl.DateTimeFormat("en-GB", { timeZone: "Asia/Seoul", hour: "2-digit", minute: "2-digit", second: "2-digit", hourCycle: "h23" }).format(now);
+      return stash(escapeHtml(whole.toLowerCase() === "[date]" ? date : date + " " + time));
+    });
+    source = source.replace(/\[age\((\d{4}-\d{2}-\d{2})\)\]/gi, (_, dateText) => {
+      const [year, month, day] = dateText.split("-").map(Number), born = new Date(Date.UTC(year, month - 1, day));
+      if (born.getUTCFullYear() !== year || born.getUTCMonth() !== month - 1 || born.getUTCDate() !== day) return stash("잘못된 날짜");
+      const todayParts = new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Seoul", year: "numeric", month: "2-digit", day: "2-digit" }).formatToParts(new Date());
+      const today = Object.fromEntries(todayParts.map(part => [part.type, Number(part.value)]));
+      let age = today.year - year;
+      if (today.month < month || (today.month === month && today.day < day)) age--;
+      return stash(escapeHtml(String(Math.max(0, age))));
+    });
     source = source.replace(/\[(?:dday|디데이)\((\d{4}-\d{2}-\d{2})\)\]/gi, (_, dateText) => {
-      const target = new Date(dateText + "T00:00:00"), today = new Date();
-      today.setHours(0, 0, 0, 0);
-      const delta = Math.ceil((target - today) / 86400000);
+      const [year, month, day] = dateText.split("-").map(Number);
+      const target = Date.UTC(year, month - 1, day);
+      const todayParts = new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Seoul", year: "numeric", month: "2-digit", day: "2-digit" }).formatToParts(new Date());
+      const today = Object.fromEntries(todayParts.map(part => [part.type, Number(part.value)]));
+      const delta = Math.round((target - Date.UTC(today.year, today.month - 1, today.day)) / 86400000);
       return stash(escapeHtml(delta === 0 ? "D-Day" : delta > 0 ? "D-" + delta : "D+" + Math.abs(delta)));
     });
     source = source.replace(/\[\*([^\]]+)\]/g, (_, raw) => {
@@ -224,6 +326,7 @@
       let urlText = raw, tail = "";
       while (/[.,!?;:)]$/.test(urlText)) { tail = urlText.slice(-1) + tail; urlText = urlText.slice(0, -1); }
       const url = safeUrl(urlText);
+      if (url && context.options.isPreview) return stash('<span class="wiki-preview-link">' + escapeHtml(urlText) + "</span>" + escapeHtml(tail));
       return url ? stash('<a href="' + escapeHtml(url) + '" target="_blank" rel="noopener noreferrer" class="media-url">' + escapeHtml(urlText) + "</a>" + escapeHtml(tail)) : raw;
     });
     let safe = escapeHtml(source);
@@ -253,8 +356,8 @@
         const prop = directive.toLowerCase().startsWith("width") ? "width" : "height";
         attrs.styles.push(prop + ":" + Math.min(1200, Number.parseInt(match[1], 10)) + (match[1].endsWith("%") ? "%" : "px"));
       } else if ((match = directive.match(/^(?:bgcolor|color)\s*=\s*(.+)$/i))) {
-        const color = safeColor(match[1]);
-        if (color) attrs.styles.push((directive.toLowerCase().startsWith("bg") ? "background-color:" : "color:") + color);
+        const color = themeColorStyles(directive.toLowerCase().startsWith("bg") ? "background-color" : "color", match[1]);
+        if (color) attrs.styles.push(color);
       } else if ((match = directive.match(/^valign\s*=\s*(top|middle|bottom)$/i))) attrs.valign = match[1].toLowerCase();
       else if (/^(?:table(?:width|height|align|bgcolor|color|bordercolor)|row(?:bgcolor|color)|col(?:bgcolor|color))\s*=/i.test(directive)) {
         value = "<" + directive + ">" + value;
@@ -264,12 +367,12 @@
     return { ...attrs, value };
   }
   function renderTable(lines, context) {
-    const options = { styles: [], align: "" }, rows = [];
+    const options = { styles: [], align: "" }, rows = [], columnStyles = new Map();
     for (const line of lines) {
       let raw = line.trim().replace(/^\|\|/, "").replace(/\|\|$/, "");
       const cells = raw.split("||").map(parseTableCell);
       const kept = [], rowStyles = [];
-      for (const cell of cells) {
+      for (const [cellIndex, cell] of cells.entries()) {
         let meta;
         while ((meta = cell.value.match(/^<((?:table(?:width|height|align|bgcolor|color|bordercolor)|row(?:bgcolor|color)|col(?:bgcolor|color))\s*=\s*[^>]+)>([\s\S]*)$/i))) {
           const [, directive, rest] = meta, [key, value] = directive.slice(1).split("=");
@@ -279,14 +382,14 @@
             const size = safe.match(/^(\d{1,4})(%|px)?$/i);
             if (size) options.styles.push((name === "tablewidth" ? "width:" : "min-height:") + Math.min(1600, Number(size[1])) + (size[2] || "px"));
           } else if (/^(tablebgcolor|tablecolor|tablebordercolor)$/.test(name)) {
-            const color = safeColor(safe);
-            if (color) options.styles.push(({ tablebgcolor: "background-color:", tablecolor: "color:", tablebordercolor: "--wiki-table-border:" })[name] + color);
+            const color = name === "tablebordercolor" ? themeColorStyles("border-color", safe) : themeColorStyles(name === "tablebgcolor" ? "background-color" : "color", safe);
+            if (color) options.styles.push(color);
           } else if (/^row(?:bgcolor|color)$/.test(name)) {
-            const color = safeColor(safe);
-            if (color) rowStyles.push((name === "rowbgcolor" ? "background-color:" : "color:") + color);
+            const color = themeColorStyles(name === "rowbgcolor" ? "background-color" : "color", safe);
+            if (color) rowStyles.push(color);
           } else if (/^col(?:bgcolor|color)$/.test(name)) {
-            const color = safeColor(safe);
-            if (color) cell.styles.push((name === "colbgcolor" ? "background-color:" : "color:") + color);
+            const color = themeColorStyles(name === "colbgcolor" ? "background-color" : "color", safe);
+            if (color) columnStyles.set(cellIndex, [...(columnStyles.get(cellIndex) || []), color]);
           }
           cell.value = rest;
         }
@@ -298,8 +401,9 @@
     const tableClass = "wiki-table" + (options.align ? " table-align-" + options.align : "");
     const htmlRows = rows.map(row => {
       const rowStyle = row.styles.length ? ' style="' + escapeHtml(row.styles.join(";")) + '"' : "";
-      return "<tr" + rowStyle + ">" + row.cells.map(cell => {
+      return "<tr" + rowStyle + ">" + row.cells.map((cell, cellIndex) => {
       const cellStyles = cell.styles.slice();
+      if (columnStyles.has(cellIndex)) cellStyles.push(...columnStyles.get(cellIndex));
       if (cell.align) cellStyles.push("text-align:" + cell.align);
       if (cell.valign) cellStyles.push("vertical-align:" + cell.valign);
       const style = cellStyles.length ? ' style="' + escapeHtml(cellStyles.join(";")) + '"' : "";
@@ -311,15 +415,16 @@
     return '<div class="wiki-table-wrap"><table class="' + tableClass + '"' + tableStyle + "><tbody>" + htmlRows + "</tbody></table></div>";
   }
   function listMarker(line) {
-    const match = String(line).match(/^(\s+)(\*+|\d+\.|[A-Za-z]\.)\s+(.*)$/);
+    const match = String(line).match(/^(\s+)(\*+|\d+\.|[A-Za-z]\.)(?:#(\d+))?\s+(.*)$/);
     if (!match) return null;
     const indent = match[1].replace(/\t/g, "  ").length;
     const marker = match[2];
     return {
       depth: Math.max(0, indent - 1) + (marker.startsWith("*") ? marker.length - 1 : 0),
       type: marker.startsWith("*") ? "ul" : "ol",
-      order: marker === "A." ? "A" : marker === "a." ? "a" : "1",
-      text: match[3]
+      order: marker === "A." ? "A" : marker === "a." ? "a" : marker === "I." ? "I" : marker === "i." ? "i" : "1",
+      start: Math.max(1, Number(match[3] || 1)),
+      text: match[4]
     };
   }
   function renderList(nodes, context) {
@@ -328,7 +433,7 @@
       const first = nodes[index], listType = first.type + (first.type === "ol" ? "-" + first.order : "");
       let end = index;
       while (end < nodes.length && nodes[end].type + (nodes[end].type === "ol" ? "-" + nodes[end].order : "") === listType) end++;
-      const tag = first.type, typeAttr = first.type === "ol" ? ' type="' + first.order + '"' : "";
+      const tag = first.type, typeAttr = first.type === "ol" ? ' type="' + first.order + '"' + (first.start > 1 ? ' start="' + first.start + '"' : "") : "";
       html += "<" + tag + ' class="wiki-list"' + typeAttr + ">" + nodes.slice(index, end).map(node =>
         "<li>" + renderInline(node.text, context) + (node.children.length ? renderList(node.children, context) : "") + "</li>").join("") + "</" + tag + ">";
       index = end;
@@ -351,7 +456,7 @@
       if (!trimmed) { flushList(); continue; }
       if (trimmed.startsWith("##")) { flushList(); continue; }
       const fold = trimmed.match(/^\{\{\{#!folding(?:\s+(.+))?$/i);
-      const wikiBox = trimmed.match(/^\{\{\{#!wiki(?:\s+.*)?$/i);
+      const wikiBox = trimmed.match(/^\{\{\{#!wiki(?:\s+(.+))?$/i);
       const code = trimmed.match(/^\{\{\{(?:#!(?:syntax|code|wiki|html)\s*([^\s}]*)|(\w+))?\s*$/i);
       if (fold || wikiBox || code || (trimmed.startsWith("{{{") && !trimmed.includes("}}}"))) {
         flushList();
@@ -375,7 +480,10 @@
           output.push('<details class="wiki-folding"><summary>' + renderInline(label, context) + "</summary><div>" +
             renderBlocks(content.join("\n"), context, cursor) + "</div></details>");
         } else if (wikiBox) {
-          output.push('<div class="wiki-box">' + renderBlocks(content.join("\n"), context, cursor) + "</div>");
+          const args = wikiBox[1] || "";
+          const styleMatch = args.match(/\bstyle\s*=\s*(?:"([^"]*)"|'([^']*)'|([^\s]+))/i);
+          const safeStyle = safeWikiStyle(styleMatch?.[1] || styleMatch?.[2] || styleMatch?.[3] || "");
+          output.push('<div class="wiki-box"' + (safeStyle ? ' style="' + escapeHtml(safeStyle) + '"' : "") + ">" + renderBlocks(content.join("\n"), context, cursor) + "</div>");
         } else {
           const language = code?.[1] || code?.[2] || "";
           output.push('<pre class="wiki-code"' + (language ? ' data-language="' + escapeHtml(language.toLowerCase()) + '"' : "") +
@@ -383,8 +491,14 @@
         }
         continue;
       }
-      if (trimmed === "[목차]") { flushList(); output.push(renderTocMarkup(context.headings)); continue; }
-      if (trimmed === "[각주]") { flushList(); output.push(renderFootnotes(context)); continue; }
+      const tocMacro = trimmed.match(/^\[(?:목차|tableofcontents)(?:\(\s*(hide)\s*\))?\]$/i);
+      if (tocMacro) {
+        flushList();
+        const toc = renderTocMarkup(context.headings);
+        output.push(tocMacro[1] && toc ? '<details class="wiki-toc-folding"><summary>목차 보기</summary>' + toc + "</details>" : toc);
+        continue;
+      }
+      if (/^\[(?:각주|footnote)\]$/i.test(trimmed)) { flushList(); output.push(renderFootnotes(context)); continue; }
       const heading = parseHeading(trimmed);
       if (heading) {
         flushList();
@@ -437,37 +551,87 @@
     if (headingIds && headingIds.length) headings.forEach((heading, index) => { if (headingIds[index]) heading.id = headingIds[index]; });
     const context = makeContext(normalized, headings, options);
     const html = renderBlocks(normalized, context, { headingIndex: 0 });
-    if (context.notes.notes.length && !html.includes('class="wiki-footnotes"')) return html + renderFootnotes(context);
-    return html;
+    return html + renderFootnotes(context);
   }
   function countImages(text) {
     return (migrateBody(text).match(/\[\[파일\s*:\s*https?:\/\/[^|\]]+(?:\|[^\]]*)?\]\]/gi) || []).length;
   }
   function countVideos(text) {
-    return (migrateBody(text).match(/\[(?:youtube|vimeo)\([A-Za-z0-9_-]{5,20}(?:,[^\]]*)?\)\]/gi) || []).length;
+    return (migrateBody(text).match(/\[(?:youtube|vimeo|nicovideo|navertv)\([A-Za-z0-9_-]{5,20}(?:,[^\]]*)?\)\]/gi) || []).length;
   }
   function editorGuideHtml() {
-    return '<p>나무위키에서 쓰는 문서 문법을 바탕으로 제목, 서식, 링크, 목록, 표, 접기, 각주와 미디어를 표시합니다.</p>' +
-      '<div class="editor-markup-grid">' +
-      '<span><code>= 제목 = · == 제목 ==</code><small>제목 단계 (1~6개의 =)</small></span>' +
-      '<span><code>[목차]</code><small>목차를 표시할 위치</small></span>' +
-      '<span><code>\'\'\'굵게\'\'\' · \'\'기울임\'\'</code><small>굵게와 기울임</small></span>' +
-      '<span><code>__밑줄__ · ~~취소선~~</code><small>밑줄과 취소선</small></span>' +
-      '<span><code>^^위첨자^^ · ,,아래첨자,,</code><small>위·아래 첨자</small></span>' +
-      '<span><code>{{{+2 크게}}} · {{{-1 작게}}}</code><small>글자 크기</small></span>' +
-      '<span><code>{{{#red,#ff0 색상}}}</code><small>라이트·다크 글자색</small></span>' +
-      '<span><code>[[문서명|표시]] · [[문서#항목]]</code><small>내부 문서와 항목 연결</small></span>' +
-      '<span><code>[[https://주소|표시]]</code><small>외부 링크</small></span>' +
-      '<span><code>&nbsp;* 항목 · &nbsp;1. 항목</code><small>들여쓰기 목록</small></span>' +
-      '<span><code>|| 칸 1 || 칸 2 ||</code><small>표 행과 셀 병합·정렬 지시자</small></span>' +
-      '<span><code>&gt; 인용문 · ----</code><small>인용과 구분선</small></span>' +
-      '<span><code>[* 각주 내용] · [각주]</code><small>각주와 각주 목록</small></span>' +
-      '<span><code>{{{#!folding 제목</code><small>접기 블록 (마지막 줄에 }}})</small></span>' +
-      '<span><code>[[파일:https://주소/사진.jpg|width=600]]</code><small>사진 링크</small></span>' +
-      '<span><code>[youtube(영상ID)] · [vimeo(ID)]</code><small>동영상 삽입</small></span>' +
-      '<span><code>[[분류:학교생활]] · ## 주석</code><small>분류 표기와 편집 주석</small></span>' +
-      '<span><code>[br] · [anchor(이름)]</code><small>줄바꿈과 이동 지점</small></span>' +
-      '</div><p class="editor-markup-note">외부 파일 주소만 사진으로 표시하며, 임의 HTML/CSS·스크립트는 실행하지 않습니다. 플랫폼 전용 매크로와 나무위키 파일 저장소는 연결되지 않습니다.</p>';
+    const groups = [
+      { title: "제목과 목차", items: [
+        ["= 제목 =", "본문 제목 · = 기호를 더하면 하위 제목", "= 제목 =", "제목"],
+        ["[tableofcontents]", "이 위치에 목차 표시 · 한글 별칭은 [목차]", "[tableofcontents]\n", ""],
+        ["[tableofcontents(hide)]", "접어서 표시하는 목차", "[tableofcontents(hide)]\n", ""]
+      ]},
+      { title: "글자 서식", items: [
+        ["'''굵게'''", "굵은 글자", "'''텍스트'''", "텍스트"],
+        ["''기울임''", "기울인 글자", "''텍스트''", "텍스트"],
+        ["__밑줄__", "밑줄", "__텍스트__", "텍스트"],
+        ["~~취소선~~ · --취소선--", "두 방식 모두 취소선", "~~텍스트~~", "텍스트"],
+        ["^^위첨자^^ · ,,아래첨자,,", "위첨자와 아래첨자", "^^텍스트^^", "텍스트"],
+        ["{{{+2 크게}}} · {{{-2 작게}}}", "글자 크기 -5부터 +5", "{{{+2 크게}}}", "크게"],
+        ["{{{#red 글자}}}", "글자색 지정", "{{{#red 텍스트}}}", "텍스트"],
+        ["{{{#red,#ff0 글자}}}", "앞은 라이트 모드, 뒤는 다크 모드 글자색", "{{{#red,#ff0 텍스트}}}", "텍스트"],
+        ["{{{[[기호]]}}}", "안쪽 문법을 적용하지 않고 그대로 표시", "{{{[[기호]]}}}", "[[기호]]"]
+      ]},
+      { title: "링크와 사진·동영상", items: [
+        ["[[문서명]] · [[문서명|표시할 글자]]", "다른 문서로 연결", "[[문서명|표시할 글자]]", "표시할 글자"],
+        ["[[문서명#문단|표시]]", "다른 문서의 문단으로 연결", "[[문서명#문단|표시]]", "표시"],
+        ["[[문서명#s-1|첫 문단으로]]", "문서 안의 번호가 있는 문단으로 연결", "[[문서명#s-1|첫 문단으로]]", "첫 문단으로"],
+        ["[include(문서명)]", "서현위키에 있는 문서의 요약을 삽입", "[include(문서명)]", "문서명"],
+        ["[[https://주소|표시]]", "외부 사이트 링크", "[[https://주소|표시]]", "표시"],
+        ["[https://주소 표시할 글자]", "대괄호 한 쌍으로 외부 사이트 연결", "[https://example.com 서현위키 안내]", "서현위키 안내"],
+        ["[[파일:https://주소/사진.jpg|width=600]]", "공개된 이미지 주소를 문서에 표시", "[[파일:https://주소/사진.jpg|width=600]]", "https://주소/사진.jpg"],
+        ["[youtube(ID)] · [vimeo(ID)]", "YouTube 또는 Vimeo 영상", "[youtube(영상ID)]", "영상ID"],
+        ["[nicovideo(sm8628149)] · [navertv(1369799)]", "니코니코 동화 또는 네이버TV 영상", "[navertv(영상ID)]", "영상ID"]
+      ]},
+      { title: "목록과 문단 꾸미기", items: [
+        [" * 항목", "글머리 목록 · 앞에 공백 한 칸", " * 항목\n * 다음 항목", "항목"],
+        [" 1. 항목", "번호 목록 · 숫자는 1.로 반복", " 1. 항목\n 1. 다음 항목", "항목"],
+        [" a. 항목 · A. 항목 · i. 항목", "알파벳·로마 숫자 목록", " a. 항목", "항목"],
+        [" > 인용문", "인용 문단", " > 인용문", "인용문"],
+        ["----", "구분선", "----\n", ""],
+        ["{{{#!folding 제목\n내용\n}}}", "누르면 펼쳐지는 접기 영역", "{{{#!folding 제목\n내용\n}}}", "제목"],
+        ["{{{#!wiki style=\"background-color:#ffffcc; padding:12px\"\n내용\n}}}", "안전한 범위의 배경색·여백·테두리 상자", "{{{#!wiki style=\"background-color:#ffffcc; padding:12px\"\n내용\n}}}", "내용"],
+        ["[br] · [clearfix]", "강제 줄바꿈과 배치 초기화", "[br]", ""]
+      ]},
+      { title: "표", items: [
+        ["|| 제목 || 제목 ||\n|| 내용 || 내용 ||", "두 칸 표", "|| 제목 || 제목 ||\n|| 내용 || 내용 ||", "제목"],
+        ["<-2> · <|2>", "셀을 가로 또는 세로로 합치기", "||<-2> 넓은 칸 ||\n||<|2> 높은 칸 || 내용 ||", "넓은 칸"],
+        ["<(> · <:> · <)>", "왼쪽·가운데·오른쪽 정렬", "||<:> 가운데 정렬 ||", "가운데 정렬"],
+        ["<width=50%> · <bgcolor=#ffffcc>", "셀 너비와 배경색", "||<width=50%><bgcolor=#ffffcc> 셀 ||", "셀"]
+      ]},
+      { title: "각주와 자동 표시", items: [
+        ["[* 설명]", "본문에 각주 표시", "설명[* 각주 내용]", "설명"],
+        ["[*이름 설명] · [*이름]", "이름을 붙여 재사용하는 각주", "내용[*참고 학교 안내] 다음 내용[*참고]", "내용"],
+        ["[각주] · [footnote]", "각주를 이 위치에 모아 표시", "[각주]\n", ""],
+        ["[date] · [datetime]", "오늘 날짜와 접속 시각", "[date] · [datetime]", ""],
+        ["[dday(2026-12-31)]", "기준일까지 남은 날 또는 지난 날", "[dday(2026-12-31)]", "2026-12-31"],
+        ["[age(2000-01-01)]", "생년월일 기준 만 나이 · 개인 정보 입력에 주의", "[age(2000-01-01)]", "2000-01-01"]
+      ]},
+      { title: "읽기 보조", items: [
+        ["[ruby(한글,읽는 법)]", "글자 위에 읽는 법 표시", "[ruby(漢字,한자)]", "漢字"]
+      ]},
+      { title: "문서 관리 문법", items: [
+        ["[[분류:학교생활]]", "문서 분류", "[[분류:학교생활]]\n", "학교생활"],
+        ["#redirect 문서명", "다른 문서로 연결하는 안내", "#redirect 문서명\n", "문서명"],
+        ["## 편집자에게만 보이는 메모", "본문에는 표시되지 않는 주석", "## 편집 메모\n", "편집 메모"],
+        ["[anchor(이름)] · [[#이름]]", "문서 안의 원하는 위치로 연결", "[anchor(위치)]", "위치"],
+        ["{{{코드 그대로}}} · {{{#!syntax js", "코드 예시 표시 · HTML/스크립트 실행은 차단", "{{{#!syntax js\nconsole.log('안전한 예시');\n}}}", "console.log"]
+      ]}
+    ];
+    const rows = items => items.map(([example, description, markup, selection]) => {
+      const search = (example + " " + description).toLocaleLowerCase("ko");
+      return '<article class="editor-syntax-card" data-syntax-search="' + escapeHtml(search) + '"><div class="editor-syntax-copy"><code>' + escapeHtml(example) + '</code><small>' + escapeHtml(description) + '</small></div><button type="button" data-action="insert-markup" data-markup="' + escapeHtml(markup) + '"' + (selection ? ' data-select-markup="' + escapeHtml(selection) + '"' : "") + '>넣기</button></article>';
+    }).join("");
+    return '<p class="editor-guide-intro">문법을 몰라도 위의 버튼을 눌러 글을 꾸밀 수 있어요. 예시 옆 <strong>넣기</strong>를 누르면 편집기에 들어갑니다.</p>' +
+      '<label class="editor-guide-search">문법 찾기<input id="syntaxHelpSearch" type="search" placeholder="예: 표, 링크, 글자색" autocomplete="off"></label>' +
+      groups.map((group, index) => '<details class="editor-guide-group"' + (index === 0 ? " open" : "") + '><summary>' + escapeHtml(group.title) + '</summary><div class="editor-syntax-list">' + rows(group.items) + '</div></details>').join("") +
+      '<p class="editor-guide-empty" id="editorGuideEmpty" hidden>검색한 문법이 없어요. 다른 단어로 찾아보세요.</p>' +
+      '<p class="editor-markup-note">서현위키는 나무위키 문법 도움말 중 브라우저에서 안전하게 처리할 수 있는 기능을 지원합니다. 원격 파일 저장소가 필요한 첨부, 사이트 전용 틀, 임의 HTML·CSS·스크립트 실행은 가져올 수 없습니다. 사진 주소는 공개된 HTTPS 이미지를 사용하고, 개인정보가 담긴 이미지는 올리지 마세요. <a href="https://namu.wiki/w/나무위키:문법%20도움말" target="_blank" rel="noopener noreferrer">나무위키 원문 도움말</a></p>';
   }
-  window.WikiParser = { markdownHtml, inlineMarkdown: (line, context = {}) => renderInline(line, context.notes ? context : makeContext(line, context.headings || [], context)), documentHeadings, renderTocMarkup, countImages, countVideos, editorGuideHtml, migrateBody };
+  window.WikiParser = { markdownHtml, inlineMarkdown: (line, context = {}) => renderInline(line, context.notes ? context : makeContext(line, context.headings || [], context)), documentHeadings, findSectionHeading, renderTocMarkup, countImages, countVideos, editorGuideHtml, migrateBody };
 })();

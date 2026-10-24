@@ -706,7 +706,7 @@ function renderTocMarkup(headings=[]) {
 function renderArticle() {
   const doc=getDoc(state.docId);if(!doc){state.view="home";return renderHome();}
   const toc=documentHeadings(doc.body);
-  const tocMarkup=renderTocMarkup(toc),hasInlineToc=/^\s*\[목차\]\s*$/m.test(WikiParser.migrateBody(doc.body||""));
+  const tocMarkup=renderTocMarkup(toc),hasInlineToc=/^\s*\[(?:목차|tableofcontents)(?:\(\s*hide\s*\))?\]\s*$/im.test(WikiParser.migrateBody(doc.body||""));
   const mediaHtml=[...(doc.images||[]).map(url=>`<a class="media-card" href="${esc(url)}" target="_blank" rel="noopener noreferrer"><img src="${esc(url)}" alt="문서 첨부 이미지" loading="lazy"></a>`),...(doc.videos||[]).map(url=>`<a class="media-link" href="${esc(url)}" target="_blank" rel="noopener noreferrer">동영상 보기 ${icons.arrow}</a>`)].join("");
   const restrictionBadge=doc.editRestricted?'<span class="tag">편집 제안 승인 필요</span>':'<span class="tag">학교 계정 누구나 편집 가능</span>';
   const restrictionAction=canManageEditRestrictions()?`<button class="button button-secondary" data-action="toggle-edit-restriction" data-id="${esc(doc.id)}">${doc.editRestricted?"편집 제한 해제":"편집 제한 설정"}</button>`:"";
@@ -1464,7 +1464,7 @@ document.addEventListener("click",async event=>{
     case "search-suggestion-doc":{const doc=getDoc(id);recordSearchSelection(doc,document.querySelector("#heroSearchInput")?.value||doc?.title||"");hideSearchSuggestions();state.docId=id;refreshArticleViews(id);navigate("article");break;}
     case "search-suggestion-keyword":beginSearch(target.dataset.term);break;
     case "search-category":beginSearch(target.dataset.category);break;
-    case "wiki-link":{const title=String(target.dataset.title||"").trim(),section=String(target.dataset.section||""),doc=liveDocs().find(item=>item.title.toLowerCase()===title.toLowerCase());if(doc){state.docId=doc.id;refreshArticleViews(doc.id);navigate("article");if(section)requestAnimationFrame(()=>{const wanted=section.toLowerCase().replace(/[^a-z0-9가-힣]+/g,"-");const heading=documentHeadings(doc.body).find(item=>item.title===section||item.id.endsWith("-"+wanted));document.getElementById(heading?.id||"")?.scrollIntoView({behavior:"smooth",block:"start"});});}else startEdit(null,title);break;}
+    case "wiki-link":{const title=String(target.dataset.title||"").trim(),section=String(target.dataset.section||""),doc=liveDocs().find(item=>item.title.toLowerCase()===title.toLowerCase());if(doc){state.docId=doc.id;refreshArticleViews(doc.id);navigate("article");if(section)requestAnimationFrame(()=>{const headings=documentHeadings(doc.body),wanted=WikiParser.findSectionHeading(headings,section);document.getElementById(wanted?.id||"")?.scrollIntoView({behavior:"smooth",block:"start"});});}else startEdit(null,title);break;}
     case "suggest-question":document.querySelector("#chatInput").value=target.dataset.question;sendChat();break;
     case "share-doc":try{await navigator.clipboard.writeText(location.href.split("#")[0]+`#doc=${encodeURIComponent(state.docId)}`);toast("문서 링크를 복사했어요.");}catch{toast("링크 복사를 사용할 수 없어요.");}break;
     case "report-doc":modalOpen(`${modalHeader("문서 신고", "관리자가 문서 내용을 확인할 수 있도록 알려 주세요.")}<div class="field"><label for="reportReason">신고 사유</label><textarea id="reportReason" placeholder="문제되는 내용과 이유를 적어 주세요."></textarea></div><div class="modal-actions"><button class="button button-secondary" data-action="close-modal">취소</button><button class="button button-primary" data-action="submit-report" data-id="${esc(id)}">신고 제출</button></div>`);break;
@@ -1505,7 +1505,9 @@ document.addEventListener("click",async event=>{
     case "view-request":{const req=state.requests.find(r=>r.id===id);if(req?.body)modalOpen(`${modalHeader(req.title||"승인 요청", "요청된 문서 내용")}<div class="article-body">${markdownHtml(req.body)}</div><div class="modal-actions"><button class="button button-secondary" data-action="close-modal">닫기</button></div>`);break;}
     case "save-limits":saveLimits();break;
     case "admin-save-overlimit":{const doc=JSON.parse(target.dataset.doc);modalClose();await persistDoc(doc);break;}
-    case "insert-markup":insertMarkup(target.dataset.markup);break;
+    case "insert-markup":insertMarkup(target.dataset.markup,target.dataset.selectMarkup||"");break;
+    case "editor-format":formatEditorText(target.dataset.before||"",target.dataset.after||"",target.dataset.placeholder||"텍스트");break;
+    case "editor-pane":setEditorPane(target.dataset.pane||"write");break;
     case "footer-about":modalOpen(`${modalHeader("서현위키 이용 안내", "학교 정보를 함께 만들어요.")}<p class="modal-copy">확인 가능한 정보를 출처와 함께 기록하고, 개인정보와 다른 사람을 식별할 수 있는 내용을 게시하지 말아 주세요. 문서 제한을 넘는 편집은 관리자 승인을 요청할 수 있습니다.</p><div class="modal-actions"><button class="button button-primary" data-action="close-modal">확인</button></div>`);break;
   }
 });
@@ -1518,12 +1520,13 @@ document.addEventListener("focusin",event=>{if(event.target.id==="heroSearchInpu
 document.addEventListener("focusout",event=>{if(event.target.id==="heroSearchInput"){clearTimeout(searchSuggestionHideTimer);searchSuggestionHideTimer=setTimeout(()=>{searchSuggestionHideTimer=null;if(!document.activeElement?.closest(".search-autocomplete")&&!document.activeElement?.closest("[data-action='trend-search']"))hideSearchSuggestions();},0);}});
 document.addEventListener("input",event=>{
   if(event.target.id==="heroSearchInput"){state.searchTracking={query:normalizeSearchText(event.target.value).replace(/\s+/g,""),docId:null};updateSearchSuggestions();}
+  if(event.target.id==="syntaxHelpSearch")filterSyntaxGuide(event.target.value);
   if(event.target.id==="chatInput")resizeChatInput(event.target);
   if(event.target.id==="adminDocSearch")filterAdminDocRows();
   if(event.target.dataset.adminSearch)filterAdminListRows(event.target.dataset.adminSearch);
   if(event.target.id==="docBody"){
     state.editingDraft={title:document.querySelector("#docTitle")?.value||"",category:document.querySelector("#docCategory")?.value||"",body:event.target.value};
-    const form=document.querySelector("#editorForm");if(form){const submit=form.querySelector('button[type="submit"]');const chars=event.target.value.length, images=countImages(event.target.value), videos=countVideos(event.target.value);const over=chars>state.config.chars||images>state.config.images||videos>state.config.videos;const count=form.querySelector(".limit-count");count.className=`limit-count ${over?"over":chars>state.config.chars*.8?"near":""}`;count.textContent=over?"관리자 승인 필요":chars>state.config.chars*.8?"제한에 가까워요":"저장 공간 절약 모드";form.querySelectorAll(".limit-chip").forEach((el,i)=>el.innerHTML=[`글자 <strong>${chars.toLocaleString()} / ${state.config.chars.toLocaleString()}</strong>`,`사진 <strong>${images} / ${state.config.images}</strong>`,`동영상 <strong>${videos} / ${state.config.videos}</strong>`][i]);const current=state.editorId?state.docs.find(doc=>doc.id===state.editorId):null;submit.textContent=editorSubmitLabel(current,over);}
+    const form=document.querySelector("#editorForm");if(form){const submit=form.querySelector('button[type="submit"]');const chars=event.target.value.length, images=countImages(event.target.value), videos=countVideos(event.target.value);const over=chars>state.config.chars||images>state.config.images||videos>state.config.videos;const count=form.querySelector(".limit-count");count.className=`limit-count ${over?"over":chars>state.config.chars*.8?"near":""}`;count.textContent=over?"관리자 승인 필요":chars>state.config.chars*.8?"제한에 가까워요":"저장 공간 절약 모드";form.querySelectorAll(".limit-chip").forEach((el,i)=>el.innerHTML=[`글자 <strong>${chars.toLocaleString()} / ${state.config.chars.toLocaleString()}</strong>`,`사진 <strong>${images} / ${state.config.images}</strong>`,`동영상 <strong>${videos} / ${state.config.videos}</strong>`][i]);const current=state.editorId?state.docs.find(doc=>doc.id===state.editorId):null;submit.textContent=editorSubmitLabel(current,over);refreshEditorPreview();}
   }
   if(event.target.id==="docTitle"||event.target.id==="docCategory"){
     state.editingDraft={title:document.querySelector("#docTitle")?.value||"",category:document.querySelector("#docCategory")?.value||"",body:document.querySelector("#docBody")?.value||""};
@@ -1562,7 +1565,57 @@ document.querySelector("#footerAbout").addEventListener("click",()=>modalOpen(`$
 function toggleTheme(){const next=document.body.classList.contains("dark")?"light":"dark";localStorage.setItem("seohyeonwiki.theme",next);document.body.classList.add("theme-transitioning");document.body.classList.toggle("dark",next==="dark");syncThemeButton();clearTimeout(themeTransitionTimer);themeTransitionTimer=setTimeout(()=>document.body.classList.remove("theme-transitioning"),520);}
 function syncThemeButton(){const button=document.querySelector("#themeButton");if(!button)return;const dark=document.body.classList.contains("dark");button.setAttribute("aria-label",dark?"라이트 모드로 전환":"다크 모드로 전환");button.title=dark?"라이트 모드로 전환":"다크 모드로 전환";}
 function saveLimits(){document.querySelectorAll("[data-setting]").forEach(input=>{const value=Number(input.value);if(Number.isFinite(value))state.config[input.dataset.setting]=Math.max(0,Math.min(input.dataset.setting==="chars"?50000:20,value));});if(state.config.chars<500)state.config.chars=500;saveLocal();modalClose();render();toast("작성 제한을 저장했어요. Firestore 보안 규칙도 같은 값으로 업데이트해 주세요.");}
-function insertMarkup(markup){const area=document.querySelector("#docBody");if(!area)return;const start=area.selectionStart,end=area.selectionEnd;area.setRangeText(markup,start,end,"end");area.focus();area.dispatchEvent(new Event("input",{bubbles:true}));}
+function insertMarkup(markup,selectMarkup=""){
+  const area=document.querySelector("#docBody");if(!area)return;
+  const start=area.selectionStart,end=area.selectionEnd,selected=area.value.slice(start,end);
+  let inserted=String(markup||"");
+  let focusOffset=-1,focusLength=0;
+  if(selectMarkup&&inserted.includes(selectMarkup)){
+    focusOffset=inserted.indexOf(selectMarkup);focusLength=selectMarkup.length;
+    if(selected){inserted=inserted.replace(selectMarkup,selected);focusLength=selected.length;}
+  }
+  area.setRangeText(inserted,start,end,"end");
+  if(focusOffset>=0)area.setSelectionRange(start+focusOffset,start+focusOffset+focusLength);
+  area.focus();area.dispatchEvent(new Event("input",{bubbles:true}));
+}
+function formatEditorText(before,after,placeholder="텍스트"){
+  const area=document.querySelector("#docBody");if(!area)return;
+  const start=area.selectionStart,end=area.selectionEnd,selected=area.value.slice(start,end)||placeholder;
+  const inserted=before+selected+after;
+  area.setRangeText(inserted,start,end,"end");
+  area.setSelectionRange(start+before.length,start+before.length+selected.length);
+  area.focus();area.dispatchEvent(new Event("input",{bubbles:true}));
+}
+function setEditorPane(pane){
+  const preview=pane==="preview";
+  document.querySelector("#editorWritePane")?.toggleAttribute("hidden",preview);
+  document.querySelector("#editorPreviewPane")?.toggleAttribute("hidden",!preview);
+  document.querySelectorAll(".editor-pane-tabs [data-pane]").forEach(button=>button.setAttribute("aria-pressed",String(button.dataset.pane===(preview?"preview":"write"))));
+  if(preview)refreshEditorPreview();
+}
+function refreshEditorPreview(){
+  const preview=document.querySelector("#editorPreview"),body=document.querySelector("#docBody")?.value||"";
+  if(!preview)return;
+  preview.innerHTML=editorPreviewHtml(body);
+}
+function editorPreviewHtml(body=""){
+  if(!String(body).trim())return '<p class="editor-preview-empty">본문을 작성하면 여기에 결과가 보여요.</p>';
+  const normalized=WikiParser.migrateBody(body),headings=documentHeadings(normalized);
+  const hasInlineToc=/^\s*\[(?:목차|tableofcontents)(?:\(\s*hide\s*\))?\]\s*$/im.test(normalized);
+  return (hasInlineToc?"":renderTocMarkup(headings))+markdownHtml(normalized,headings.map(item=>item.id),null,{isPreview:true});
+}
+function filterSyntaxGuide(query=""){
+  const needle=String(query).trim().toLocaleLowerCase("ko");
+  let total=0;
+  document.querySelectorAll(".editor-guide-group").forEach(group=>{
+    const cards=[...group.querySelectorAll(".editor-syntax-card")];let visible=0;
+    cards.forEach(card=>{const show=!needle||card.dataset.syntaxSearch.includes(needle);card.hidden=!show;if(show)visible++;});
+    group.hidden=visible===0;
+    if(needle&&visible)group.open=true;
+    total+=visible;
+  });
+  const empty=document.querySelector("#editorGuideEmpty");if(empty)empty.hidden=total>0;
+}
 async function sendChat(){
   const input=document.querySelector("#chatInput");if(!input||state.chatSending)return;const question=input.value.trim();if(!question)return;
   state.chatSending=true;
@@ -1660,7 +1713,36 @@ function renderEditor(){
   const chars=draft.body.length,imageCount=countImages(draft.body),videoCount=countVideos(draft.body),over=chars>state.config.chars||imageCount>state.config.images||videoCount>state.config.videos,near=chars>state.config.chars*.8;
   const approvalInfo=!current?"새 문서는 관리자 승인 후 공개됩니다.":current?.editRestricted&&!state.isAdmin?"이 문서는 편집 제안을 제출하고 권한 있는 이용자의 승인을 받아야 반영됩니다.":"일반 문서는 작성자가 아니어도 학교 계정으로 편집할 수 있고 저장 즉시 반영됩니다.";
   const grammar=WikiParser.editorGuideHtml();
-  return `<div class="content-page"><div class="page-title-row"><div><p class="eyebrow">Write together</p><h1 class="page-title">${current?"문서 편집":"새 문서 만들기"}</h1><p class="page-subtitle">확인한 정보를 알기 쉽게 정리해 주세요.</p></div></div><form class="panel editor-panel" id="editorForm"><div class="admin-callout">${icons.shield}<span>${approvalInfo} 글자 <strong>${state.config.chars.toLocaleString()}자</strong>, 사진 링크 <strong>${state.config.images}개</strong>, 동영상 링크 <strong>${state.config.videos}개</strong> 제한을 넘긴 편집도 승인 후 반영됩니다.</span></div><div class="field"><label for="docTitle">문서 제목</label><input id="docTitle" name="title" required maxlength="80" placeholder="예: 동아리, 급식, 학교 행사" value="${esc(draft.title)}"></div><div class="field"><label for="docCategory">분류</label><select id="docCategory" name="category">${WIKI_CATEGORIES.map(category=>`<option value="${esc(category)}" ${draft.category===category?"selected":""}>${esc(category)}</option>`).join("")}</select></div><div class="field"><label for="docBody">본문</label><div class="editor-toolbar"><button type="button" data-action="insert-markup" data-markup="[[파일:https://주소/사진.jpg|width=600]]">사진 링크</button><button type="button" data-action="insert-markup" data-markup="[youtube(동영상ID)]">동영상 링크</button></div><details class="editor-markup-help"><summary>작성 문법 보기</summary><div class="editor-markup-content">${grammar}</div></details><textarea id="docBody" name="body" required placeholder="= 문서 제목 =\n\n[목차]\n\n== 소개 ==\n\n확인된 내용을 작성해 주세요.">${esc(draft.body)}</textarea><span class="field-hint">미디어는 링크로 삽입하며 파일을 직접 업로드하지 않습니다. 사람을 식별할 수 있는 사진·개인 정보는 올리지 마세요.</span></div><div class="limits-row"><span class="limit-chip">글자 <strong>${chars.toLocaleString()} / ${state.config.chars.toLocaleString()}</strong></span><span class="limit-chip">사진 <strong>${imageCount} / ${state.config.images}</strong></span><span class="limit-chip">동영상 <strong>${videoCount} / ${state.config.videos}</strong></span><span class="limit-count ${over?"over":near?"near":""}">${over?"관리자 승인 필요":near?"제한에 가까워요":"저장 공간 절약 모드"}</span></div><div class="editor-actions"><span class="editor-actions-left">문서는 저장 후 검색과 AI 답변에 반영됩니다.</span><div class="editor-actions-right"><button type="submit" class="button button-primary">${editorSubmitLabel(current,over)}</button></div></div></form></div>`;
+  return `<div class="content-page"><div class="page-title-row"><div><p class="eyebrow">Write together</p><h1 class="page-title">${current?"문서 편집":"새 문서 만들기"}</h1><p class="page-subtitle">확인한 정보를 알기 쉽게 정리해 주세요.</p></div></div><form class="panel editor-panel" id="editorForm"><div class="admin-callout">${icons.shield}<span>${approvalInfo} 글자 <strong>${state.config.chars.toLocaleString()}자</strong>, 사진 링크 <strong>${state.config.images}개</strong>, 동영상 링크 <strong>${state.config.videos}개</strong> 제한을 넘긴 편집도 승인 후 반영됩니다.</span></div>
+    <div class="field"><label for="docTitle">문서 제목</label><input id="docTitle" name="title" required maxlength="80" placeholder="예: 동아리, 급식, 학교 행사" value="${esc(draft.title)}"></div>
+    <div class="field"><label for="docCategory">분류</label><select id="docCategory" name="category">${WIKI_CATEGORIES.map(category=>`<option value="${esc(category)}" ${draft.category===category?"selected":""}>${esc(category)}</option>`).join("")}</select></div>
+    <div class="field"><label for="docBody">본문</label>
+      <div class="editor-toolbar editor-toolbar-rich" role="toolbar" aria-label="빠른 문서 서식">
+        <button type="button" data-action="editor-format" data-before="'''" data-after="'''" data-placeholder="굵게">굵게</button>
+        <button type="button" data-action="editor-format" data-before="''" data-after="''" data-placeholder="기울임">기울임</button>
+        <button type="button" data-action="editor-format" data-before="__" data-after="__" data-placeholder="밑줄">밑줄</button>
+        <button type="button" data-action="editor-format" data-before="~~" data-after="~~" data-placeholder="취소선">취소선</button>
+        <span class="editor-toolbar-separator" aria-hidden="true"></span>
+        <button type="button" data-action="insert-markup" data-markup="= 제목 =\n\n" data-select-markup="제목">제목</button>
+        <button type="button" data-action="insert-markup" data-markup="== 소제목 ==\n\n" data-select-markup="소제목">소제목</button>
+        <button type="button" data-action="insert-markup" data-markup=" * 항목\n * 다음 항목\n" data-select-markup="항목">목록</button>
+        <button type="button" data-action="insert-markup" data-markup=" 1. 항목\n 1. 다음 항목\n" data-select-markup="항목">번호</button>
+        <button type="button" data-action="insert-markup" data-markup=" > 인용문\n" data-select-markup="인용문">인용</button>
+        <button type="button" data-action="insert-markup" data-markup="[[문서명|표시할 글자]]" data-select-markup="표시할 글자">문서 링크</button>
+        <button type="button" data-action="insert-markup" data-markup="[[https://주소|표시할 글자]]" data-select-markup="표시할 글자">웹 링크</button>
+        <button type="button" data-action="insert-markup" data-markup="|| 제목 || 설명 ||\n|| 내용 || 내용 ||\n" data-select-markup="제목">표</button>
+        <button type="button" data-action="insert-markup" data-markup="[tableofcontents]\n">목차</button>
+        <button type="button" data-action="insert-markup" data-markup="[* 각주 내용]" data-select-markup="각주 내용">각주</button>
+        <button type="button" data-action="insert-markup" data-markup="[[파일:https://주소/사진.jpg|width=600]]" data-select-markup="https://주소/사진.jpg">사진</button>
+        <button type="button" data-action="insert-markup" data-markup="[youtube(영상ID)]" data-select-markup="영상ID">영상</button>
+      </div>
+      <details class="editor-markup-help"><summary>다른 문법 찾아보기</summary><div class="editor-markup-content">${grammar}</div></details>
+      <div class="editor-pane-tabs" role="tablist" aria-label="본문 보기 방식"><button type="button" data-action="editor-pane" data-pane="write" aria-pressed="true">작성</button><button type="button" data-action="editor-pane" data-pane="preview" aria-pressed="false">미리보기</button><span>미리보기에서 저장 전 결과를 확인할 수 있어요.</span></div>
+      <div id="editorWritePane" class="editor-source-pane"><textarea id="docBody" name="body" required placeholder="= 문서 제목 =\n[tableofcontents]\n\n= 소개 =\n\n확인된 내용을 편하게 적어 주세요. 서식 버튼으로 제목과 글자 모양을 넣을 수 있어요.">${esc(draft.body)}</textarea></div>
+      <div id="editorPreviewPane" class="editor-preview-pane" hidden><div class="editor-preview-note">저장 전 미리보기 · 링크는 문서에 저장한 뒤 사용할 수 있어요.</div><div id="editorPreview" class="article-body">${editorPreviewHtml(draft.body)}</div></div>
+      <span class="field-hint">사진은 공개 이미지 주소로 표시합니다. 학생 얼굴이나 개인 정보를 확인하고 게시하지 마세요.</span>
+    </div>
+    <div class="limits-row"><span class="limit-chip">글자 <strong>${chars.toLocaleString()} / ${state.config.chars.toLocaleString()}</strong></span><span class="limit-chip">사진 <strong>${imageCount} / ${state.config.images}</strong></span><span class="limit-chip">동영상 <strong>${videoCount} / ${state.config.videos}</strong></span><span class="limit-count ${over?"over":near?"near":""}">${over?"관리자 승인 필요":near?"제한에 가까워요":"저장 공간 절약 모드"}</span></div><div class="editor-actions"><span class="editor-actions-left">문서는 저장 후 검색과 AI 답변에 반영됩니다.</span><div class="editor-actions-right"><button type="submit" class="button button-primary">${editorSubmitLabel(current,over)}</button></div></div></form></div>`;
 }
 
 
@@ -1669,7 +1751,7 @@ function docEditorBody(doc){
   const videos=(doc.videos||[]).map(url=>{const parsed=safeHttpUrl(url),id=parsed?.match(/(?:youtube\.com\/watch\?v=|youtu\.be\/)([A-Za-z0-9_-]{6,20})/)?.[1];return id?"\n\n[youtube("+id+")]":"\n\n"+url;}).join("");
   return WikiParser.migrateBody(doc.body||"")+images+videos;
 }
-function markdownHtml(text="",headingIds=null,tocMarkup=null){return WikiParser.markdownHtml(text,headingIds,tocMarkup,{docs:liveDocs()});}
+function markdownHtml(text="",headingIds=null,tocMarkup=null,options={}){return WikiParser.markdownHtml(text,headingIds,tocMarkup,{docs:liveDocs(),...options});}
 function inlineMarkdown(line,context={}){return WikiParser.inlineMarkdown(line,{...context,headings:context.headings||documentHeadings(getDoc(state.docId)?.body||""),docs:liveDocs()});}
 function documentHeadings(text=""){return WikiParser.documentHeadings(text);}
 function renderTocMarkup(headings=[]){return WikiParser.renderTocMarkup(headings);}
