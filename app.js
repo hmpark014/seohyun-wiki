@@ -839,15 +839,15 @@ function renderAI() {
   const setupNotice=state.aiSetupIssue?`<div class="admin-callout ai-setup-notice">${icons.shield}<span>${esc(state.isAdmin?state.aiSetupIssue:"AI 답변 연결을 준비 중이에요. 문제가 계속되면 관리자에게 알려 주세요.")}</span></div>`:"";
   return `<div class="ai-layout"><div class="ai-heading"><span class="ai-spark">${icons.spark}</span><div><h1>서현위키 AI</h1><p>위키 문서에서 답을 찾고 출처를 함께 알려드려요.</p></div></div>${setupNotice}<section class="panel chat-panel"><div class="chat-messages" id="chatMessages">${messages}</div>${suggestions}<form class="chat-composer" id="chatForm"><textarea id="chatInput" rows="1" maxlength="500" placeholder="서현고등학교에 대해 물어보세요..." aria-label="질문 입력" ${state.chatSending?"disabled":""} required></textarea><button class="chat-send" type="submit" aria-label="질문 보내기" title="질문 보내기" ${state.chatSending?"disabled":""}>${icons.arrow}</button></form></section><p class="chat-footnote">AI 답변은 틀릴 수 있어요. 중요한 정보는 문서와 공식 공지를 함께 확인해 주세요.</p></div>`;
 }
-const AI_QUERY_STOP_WORDS=new Set(["어디","무엇","뭐","어떤","무슨","왜","누구","언제","어떻게","어때","대해","알려줘","알려주세요","알려줄래","말해줘","설명해줘","정리해줘","찾아줘","보여줘","확인","확인해","확인해줘","있나요","있니","있어","있어요","있는지","있을까","있을까요","인가요","인가","해줘","해주세요","해","좀","정보","내용","답변","질문","관련","궁금","부탁","부탁해"]);
-const KOREAN_PARTICLE_SUFFIX=/^(.*?)(?:으로부터|에게서|에서는|으로|에서|에게|까지|부터|처럼|보다|이라서|인가요|이에요|예요|에요|이야|이라|라고|네요|군요|은|는|이|가|을|를|의|에|와|과|로|도|만|랑|께|야|죠)$/u;
+const AI_QUERY_STOP_WORDS=new Set(["무엇","뭐","어떤","무슨","왜","누구","어떻게","어때","대해","알려줘","알려주세요","알려줄래","말해줘","설명해줘","정리해줘","찾아줘","보여줘","확인","확인해","확인해줘","있나요","있니","있어","있어요","있는지","있을까","있을까요","인가요","인가","해줘","해주세요","해","좀","정보","내용","답변","질문","관련","궁금","부탁","부탁해","물어보","물어보니까","물어보면","말해봐"]);
+const KOREAN_PARTICLE_SUFFIX=/^(.*?)(?:으로부터|에게서|에서는|으로|에서|에게|까지|부터|처럼|보다|이라서|인가요|이에요|예요|에요|이야|이라|라고|냐고|나요|니까|인지|는지|은지|인데|라면|네요|군요|은|는|이|가|을|를|의|에|와|과|로|도|만|랑|께|야|죠)$/u;
 const AI_QUERY_SYNONYM_GROUPS=[
-  ["주소","주소지","도로명주소","소재지","위치"],
+  ["주소","주소지","도로명주소","소재지","위치","어디"],
   ["연락처","전화번호","전화"],
   ["교칙","학칙","학교규칙","규칙"],
   ["급식","식단","급식표"],
   ["개교","설립","설립연도","개교연도"],
-  ["학사일정","학교일정","일정","행사"],
+  ["학사일정","학교일정","일정","행사","날짜","시기","기간","언제"],
   ["교육과정","수업","교과","과목"],
   ["동아리","동아리활동","학생동아리"]
 ];
@@ -887,7 +887,7 @@ function aiRelevantTextWindow(text,terms,limit,termWeights) {
 function rankRelevantDocs(question) {
   const concepts=aiSearchConcepts(question);
   if(!concepts.length)return [];
-  return liveDocs().map(doc=>{
+  const ranked=liveDocs().map(doc=>{
     const titleTerms=aiSearchTerms(doc.title);
     const summaryTerms=aiSearchTerms(doc.summary||"");
     const categoryTerms=aiSearchTerms(doc.category||"");
@@ -902,9 +902,12 @@ function rankRelevantDocs(question) {
     });
     const exactTitle=normalizeSearchText(doc.title).replace(/\s+/g,"")&&normalizeSearchText(question).replace(/\s+/g,"").includes(normalizeSearchText(doc.title).replace(/\s+/g,""));
     if(exactTitle)score+=16;
-    return {...doc,score,matchedConcepts,titleConcepts};
-  }).filter(doc=>doc.matchedConcepts>=Math.min(2,concepts.length)||doc.titleConcepts>0&&doc.matchedConcepts>0)
-    .sort((a,b)=>b.score-a.score||b.matchedConcepts-a.matchedConcepts).slice(0,4);
+    return {...doc,score,matchedConcepts,titleConcepts,exactTitle:Boolean(exactTitle)};
+  }).sort((a,b)=>b.score-a.score||b.matchedConcepts-a.matchedConcepts);
+  const precise=ranked.filter(doc=>doc.exactTitle||doc.matchedConcepts>=Math.min(2,concepts.length)||doc.titleConcepts>0&&doc.matchedConcepts>0);
+  // Fill gaps with a single-concept match so a relevant document is not discarded by strict keyword thresholds.
+  const candidates=precise.length>=4?precise:ranked.filter(doc=>doc.matchedConcepts>0);
+  return candidates.slice(0,4);
 }
 function buildAIExcerpt(doc,question) {
   const body=String(doc.body||"");
