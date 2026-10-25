@@ -1255,7 +1255,7 @@ function extractMedia(text="") {
   for(const match of text.matchAll(imageMarkdown))images.push(match[1]);
   const looseImages=/\bhttps?:\/\/[^\s)]+\.(?:png|jpe?g|gif|webp)(?:\?[^\s)]*)?/gi;
   for(const match of text.matchAll(looseImages))if(!images.includes(match[0]))images.push(match[0]);
-  const videoRegex=/https?:\/\/(?:www\.)?(?:youtube\.com\/watch\?v=[\w-]+|youtu\.be\/[\w-]+|vimeo\.com\/\d+)/gi;
+  const videoRegex=/https:\/\/(?:www\.)?(?:youtube\.com\/(?:(?:watch\?v=|embed\/|shorts\/|live\/)[\w-]{6,20})|youtu\.be\/[\w-]{6,20}|vimeo\.com\/\d{5,12}|youtube-nocookie\.com\/embed\/[\w-]{6,20})[^\s)]*|https:\/\/player\.vimeo\.com\/video\/\d{5,12}[^\s)]*|https:\/\/[^\s)]+\.(?:mp4|webm|ogv)(?:\?[^\s)]*)?/gi;
   for(const match of text.matchAll(videoRegex))if(!videos.includes(match[0]))videos.push(match[0]);
   return {images,videos};
 }
@@ -1292,7 +1292,7 @@ function restoreLegacyMedia(body="",images=[],videos=[]) {
 function stripMedia(text="") {
   return text.replace(/!\[[^\]]*\]\(https?:\/\/[^\s)]+\)/gi,"[사진 링크]")
     .replace(/\bhttps?:\/\/[^\s)]+\.(?:png|jpe?g|gif|webp)(?:\?[^\s)]*)?/gi,"[사진 링크]")
-    .replace(/https?:\/\/(?:www\.)?(?:youtube\.com\/watch\?v=[\w-]+|youtu\.be\/[\w-]+|vimeo\.com\/\d+)/gi,"[동영상 링크]");
+    .replace(/https:\/\/(?:www\.)?(?:youtube\.com\/(?:(?:watch\?v=|embed\/|shorts\/|live\/)[\w-]{6,20})|youtu\.be\/[\w-]{6,20}|vimeo\.com\/\d{5,12}|youtube-nocookie\.com\/embed\/[\w-]{6,20})[^\s)]*|https:\/\/player\.vimeo\.com\/video\/\d{5,12}[^\s)]*|https:\/\/[^\s)]+\.(?:mp4|webm|ogv)(?:\?[^\s)]*)?/gi,"[동영상 링크]");
 }
 async function persistDoc(doc) {
   const index=state.docs.findIndex(d=>d.id===doc.id),existing=index>=0?state.docs[index]:null;
@@ -1857,9 +1857,8 @@ function renderEditor(){
         <button type="button" data-action="insert-markup" data-markup="|| 제목 || 설명 ||\n|| 내용 || 내용 ||\n" data-select-markup="제목">표</button>
         <button type="button" data-action="insert-markup" data-markup="[tableofcontents]\n">목차</button>
         <button type="button" data-action="insert-markup" data-markup="[* 각주 내용]" data-select-markup="각주 내용">각주</button>
-        <button type="button" data-action="insert-markup" data-markup="[[파일:https://주소/사진.jpg|width=600]]" data-select-markup="https://주소/사진.jpg">사진 주소</button>
         <button type="button" data-action="upload-editor-image" ${state.editorImageUploadBusy?"disabled":""}>갤러리에서 사진 선택</button>
-        <button type="button" data-action="insert-markup" data-markup="[youtube(영상ID)]" data-select-markup="영상ID">영상</button>
+        <button type="button" data-action="insert-markup" data-markup="https://youtu.be/영상ID\n" data-select-markup="https://youtu.be/영상ID">동영상 링크</button>
       </div>
       <input id="editorImageFile" type="file" accept="image/*" aria-label="업로드할 사진 파일 선택" hidden>
       <span id="editorImageUploadStatus" class="editor-image-upload-status" role="status" aria-live="polite">${state.editorImageUploadBusy?"사진을 저장소에 올리고 있어요…":""}</span>
@@ -1867,7 +1866,7 @@ function renderEditor(){
       <div class="editor-pane-tabs" role="tablist" aria-label="본문 보기 방식"><button type="button" data-action="editor-pane" data-pane="write" aria-pressed="true">작성</button><button type="button" data-action="editor-pane" data-pane="preview" aria-pressed="false">미리보기</button><span>미리보기에서 저장 전 결과를 확인할 수 있어요.</span></div>
       <div id="editorWritePane" class="editor-source-pane"><textarea id="docBody" name="body" required placeholder="= 문서 제목 =\n[tableofcontents]\n\n= 소개 =\n\n확인된 내용을 편하게 적어 주세요. 서식 버튼으로 제목과 글자 모양을 넣을 수 있어요.">${esc(draft.body)}</textarea></div>
       <div id="editorPreviewPane" class="editor-preview-pane" hidden><div class="editor-preview-note">저장 전 미리보기 · 링크는 문서에 저장한 뒤 사용할 수 있어요.</div><div id="editorPreview" class="article-body">${editorPreviewHtml(draft.body)}</div></div>
-      <span class="field-hint">JPEG·PNG·WebP·GIF 사진을 5MB 이하로 올릴 수 있어요. HEIC는 브라우저가 열 수 있으면 JPEG로 변환해요. 업로드한 사진은 문서와 함께 공개되니 학생 얼굴이나 개인 정보는 올리지 마세요.</span>
+      <span class="field-hint">사진은 ‘갤러리에서 사진 선택’으로 올려요. YouTube·Vimeo 주소나 공개된 MP4·WebM·OGV 영상 파일 주소를 한 줄에 붙여 넣으면 재생 화면으로 표시돼요. 업로드한 사진은 문서와 함께 공개되니 학생 얼굴이나 개인 정보는 올리지 마세요.</span>
     </div>
     <div class="limits-row"><span class="limit-chip">글자 <strong>${chars.toLocaleString()} / ${state.config.chars.toLocaleString()}</strong></span><span class="limit-chip">사진 <strong>${imageCount} / ${state.config.images}</strong></span><span class="limit-chip">동영상 <strong>${videoCount} / ${state.config.videos}</strong></span><span class="limit-count ${over?"over":near?"near":""}">${over?"관리자 승인 필요":near?"제한에 가까워요":"저장 공간 절약 모드"}</span></div><div class="editor-actions"><span class="editor-actions-left">문서는 저장 후 검색과 AI 답변에 반영됩니다.</span><div class="editor-actions-right"><button type="submit" class="button button-primary" ${state.editorImageUploadBusy?"disabled":""}>${editorSubmitLabel(current,over)}</button></div></div></form></div>`;
 }

@@ -146,8 +146,8 @@
     const entries = migrateBody(text).match(/\[\*[^\]]+\]/g) || [];
     for (const entry of entries) {
       const raw = entry.slice(2, -1).trim();
-      const definition = raw.match(/^([A-Za-z][\w-]*)\s+([\s\S]+)$/);
-      const reference = raw.match(/^[A-Za-z][\w-]*$/);
+      const definition = raw.match(/^([\p{L}][\p{L}\p{N}_-]*)\s+([\s\S]+)$/u);
+      const reference = raw.match(/^[\p{L}][\p{L}\p{N}_-]*$/u);
       if (definition) {
         if (!named.has(definition[1])) {
           const index = notes.push({ name: definition[1], text: definition[2].trim(), refs: 0 }) - 1;
@@ -215,6 +215,39 @@
     } else return "";
     return '<div class="wiki-video"><iframe src="' + escapeHtml(src) + '" title="' + title +
       '" loading="lazy" referrerpolicy="strict-origin-when-cross-origin" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share" allowfullscreen></iframe></div>';
+  }
+  function parseVideoUrl(raw) {
+    let source = String(raw || "").trim();
+    while (/[.,!?;:]$/.test(source)) source = source.slice(0, -1);
+    const safe = safeUrl(source);
+    if (!safe) return null;
+    let url;
+    try { url = new URL(safe); } catch { return null; }
+    if (url.protocol !== "https:") return null;
+    const host = url.hostname.toLowerCase().replace(/^www\./, "");
+    if (["youtube.com", "m.youtube.com", "music.youtube.com", "youtube-nocookie.com", "youtu.be"].includes(host)) {
+      const id = host === "youtu.be" ? url.pathname.split("/").filter(Boolean)[0] :
+        url.searchParams.get("v") || url.pathname.match(/^\/(?:embed|shorts|live)\/([A-Za-z0-9_-]{6,20})/)?.[1];
+      if (id && /^[A-Za-z0-9_-]{6,20}$/.test(id)) {
+        return { key: "youtube:" + id, html: videoMarkup("youtube", id) };
+      }
+      return null;
+    }
+    if (["vimeo.com", "player.vimeo.com"].includes(host)) {
+      const segments = url.pathname.split("/").filter(Boolean);
+      const id = segments.find(segment => /^\d{5,12}$/.test(segment));
+      const idIndex = segments.indexOf(id);
+      const hash = url.searchParams.get("h") || segments.find((segment, index) => index > idIndex && /^[A-Za-z0-9]{6,32}$/.test(segment)) || "";
+      if (id) {
+        const src = "https://player.vimeo.com/video/" + id + (hash ? "?h=" + encodeURIComponent(hash) : "");
+        return { key: "vimeo:" + id + (hash ? ":" + hash : ""), html: '<div class="wiki-video"><iframe src="' + escapeHtml(src) + '" title="Vimeo 동영상" loading="lazy" referrerpolicy="strict-origin-when-cross-origin" allow="autoplay; fullscreen; picture-in-picture" allowfullscreen></iframe></div>' };
+      }
+      return null;
+    }
+    const extension = url.pathname.match(/\.(mp4|webm|ogv)$/i)?.[1]?.toLowerCase();
+    if (!extension) return null;
+    const mime = extension === "ogv" ? "video/ogg" : "video/" + extension;
+    return { key: "file:" + url.href, html: '<div class="wiki-video wiki-video-file"><video controls playsinline preload="metadata"><source src="' + escapeHtml(url.href) + '" type="' + mime + '">이 브라우저에서 재생할 수 없는 영상이에요.</video></div>' };
   }
   function internalLink(target, label, context) {
     const name = String(target || "").trim();
@@ -308,10 +341,10 @@
       return stash(escapeHtml(delta === 0 ? "D-Day" : delta > 0 ? "D-" + delta : "D+" + Math.abs(delta)));
     });
     source = source.replace(/\[\*([^\]]+)\]/g, (_, raw) => {
-      const value = raw.trim(), definition = value.match(/^([A-Za-z][\w-]*)\s+([\s\S]+)$/);
+      const value = raw.trim(), definition = value.match(/^([\p{L}][\p{L}\p{N}_-]*)\s+([\s\S]+)$/u);
       let index;
       if (definition) index = context.notes.named.get(definition[1]);
-      else if (/^[A-Za-z][\w-]*$/.test(value)) index = context.notes.named.get(value);
+      else if (/^[\p{L}][\p{L}\p{N}_-]*$/u.test(value)) index = context.notes.named.get(value);
       else {
         const unnamed = [];
         context.notes.notes.forEach((note, noteIndex) => { if (!note.name) unnamed.push(noteIndex); });
@@ -348,7 +381,7 @@
       const directive = value.match(directives)[1].slice(1, -1).trim();
       value = value.slice(directives.lastIndex || value.match(directives)[0].length).trimStart();
       let match;
-      if ((match = directive.match(/^(?:<)?([|^])\|(\d+)$/))) attrs.rowspan = Math.min(30, Math.max(1, Number(match[2])));
+      if ((match = directive.match(/^(?:<)?([|^])\|?(\d+)$/))) attrs.rowspan = Math.min(30, Math.max(1, Number(match[2])));
       else if ((match = directive.match(/^-(?:\|)?(\d+)$/))) attrs.colspan = Math.min(30, Math.max(1, Number(match[1])));
       else if ((match = directive.match(/^\|(\d+)$/))) attrs.rowspan = Math.min(30, Math.max(1, Number(match[1])));
       else if (directive === "(") attrs.align = "left";
@@ -501,6 +534,7 @@
         output.push(tocMacro[1] && toc ? '<details class="wiki-toc-folding"><summary>목차 보기</summary>' + toc + "</details>" : toc);
         continue;
       }
+      if (/^\[\[?include\([^)]+\)\]\]?$/i.test(trimmed)) { flushList(); output.push(renderInline(trimmed, context)); continue; }
       if (/^\[(?:각주|footnote)\]$/i.test(trimmed)) { flushList(); output.push(renderFootnotes(context)); continue; }
       const heading = parseHeading(trimmed);
       if (heading) {
@@ -532,6 +566,8 @@
       }
       const item = listMarker(raw);
       if (item) { addList(item); continue; }
+      const video = parseVideoUrl(trimmed);
+      if (video) { flushList(); output.push(video.html); continue; }
       flushList();
       if (/^-{4,}$/.test(trimmed)) output.push('<hr class="wiki-divider">');
       else if (/^\[clearfix\]$/i.test(trimmed)) output.push('<div class="wiki-clearfix"></div>');
@@ -560,14 +596,24 @@
     return (migrateBody(text).match(/\[\[파일\s*:\s*https?:\/\/[^|\]]+(?:\|[^\]]*)?\]\]/gi) || []).length;
   }
   function countVideos(text) {
-    return (migrateBody(text).match(/\[(?:youtube|vimeo|nicovideo|navertv)\([A-Za-z0-9_-]{5,20}(?:,[^\]]*)?\)\]/gi) || []).length;
+    const source = migrateBody(text), videos = new Set();
+    for (const match of source.matchAll(/\[(youtube|vimeo|nicovideo|navertv)\(([^)]*)\)\]/gi)) {
+      const platform = match[1].toLowerCase(), raw = match[2].split(",")[0].trim();
+      if (videoMarkup(platform, raw)) videos.add(platform + ":" + raw);
+    }
+    for (const line of source.split(/\r?\n/)) {
+      const video = parseVideoUrl(line.trim());
+      if (video) videos.add(video.key);
+    }
+    return videos.size;
   }
   function editorGuideHtml() {
     const groups = [
       { title: "제목과 목차", items: [
-        ["= 제목 =", "본문 제목 · = 기호를 더하면 하위 제목", "= 제목 =", "제목"],
-        ["[tableofcontents]", "이 위치에 목차 표시 · 한글 별칭은 [목차]", "[tableofcontents]\n", ""],
-        ["[tableofcontents(hide)]", "접어서 표시하는 목차", "[tableofcontents(hide)]\n", ""]
+        ["= 큰 제목 =", "문서의 큰 제목을 만들어요. = 기호를 늘리면 더 작은 제목이 돼요.", "= 큰 제목 =\n\n", "큰 제목"],
+        ["== 작은 제목 ==", "큰 제목 아래에 소제목을 만들어요.", "== 작은 제목 ==\n\n", "작은 제목"],
+        ["[tableofcontents]", "이 줄에 목차를 표시해요. 먼저 제목 문법으로 제목을 작성해 주세요.", "[tableofcontents]\n", ""],
+        ["[tableofcontents(hide)]", "‘목차 보기’를 눌러 펼치는 접힌 목차예요.", "[tableofcontents(hide)]\n", ""]
       ]},
       { title: "글자 서식", items: [
         ["'''굵게'''", "굵은 글자", "'''텍스트'''", "텍스트"],
@@ -583,12 +629,10 @@
         ["[[문서명]] · [[문서명|표시할 글자]]", "다른 문서로 연결", "[[문서명|표시할 글자]]", "표시할 글자"],
         ["[[문서명#문단|표시]]", "다른 문서의 문단으로 연결", "[[문서명#문단|표시]]", "표시"],
         ["[[문서명#s-1|첫 문단으로]]", "문서 안의 번호가 있는 문단으로 연결", "[[문서명#s-1|첫 문단으로]]", "첫 문단으로"],
-        ["[include(문서명)]", "서현위키에 있는 문서의 요약을 삽입", "[include(문서명)]", "문서명"],
-        ["[[https://주소|표시]]", "외부 사이트 링크", "[[https://주소|표시]]", "표시"],
+        ["[include(문서명)]", "기존 문서의 본문을 이 자리에 보여 줘요.", "[include(문서명)]", "문서명"],
         ["[https://주소 표시할 글자]", "대괄호 한 쌍으로 외부 사이트 연결", "[https://example.com 서현위키 안내]", "서현위키 안내"],
-        ["[[파일:https://주소/사진.jpg|width=600]]", "공개된 이미지 주소를 문서에 표시", "[[파일:https://주소/사진.jpg|width=600]]", "https://주소/사진.jpg"],
-        ["[youtube(ID)] · [vimeo(ID)]", "YouTube 또는 Vimeo 영상", "[youtube(영상ID)]", "영상ID"],
-        ["[nicovideo(sm8628149)] · [navertv(1369799)]", "니코니코 동화 또는 네이버TV 영상", "[navertv(영상ID)]", "영상ID"]
+        ["YouTube 또는 Vimeo 주소", "영상 주소를 한 줄에 붙여 넣으면 재생 화면으로 보여요.", "https://youtu.be/영상ID\n", "https://youtu.be/영상ID"],
+        ["MP4 · WebM · OGV 주소", "공개된 영상 파일의 HTTPS 주소를 한 줄에 붙여 넣어요.", "https://example.com/video.mp4\n", "https://example.com/video.mp4"]
       ]},
       { title: "목록과 문단 꾸미기", items: [
         [" * 항목", "글머리 목록 · 앞에 공백 한 칸", " * 항목\n * 다음 항목", "항목"],
@@ -597,7 +641,7 @@
         [" > 인용문", "인용 문단", " > 인용문", "인용문"],
         ["----", "구분선", "----\n", ""],
         ["{{{#!folding 제목\n내용\n}}}", "누르면 펼쳐지는 접기 영역", "{{{#!folding 제목\n내용\n}}}", "제목"],
-        ["{{{#!wiki style=\"background-color:#ffffcc; padding:12px\"\n내용\n}}}", "안전한 범위의 배경색·여백·테두리 상자", "{{{#!wiki style=\"background-color:#ffffcc; padding:12px\"\n내용\n}}}", "내용"],
+        ["{{{#!wiki style=\"background-color:#ffffcc; padding:12px; border:1px solid #ddddaa\"\n내용\n}}}", "안전한 범위의 배경색·여백·테두리 상자", "{{{#!wiki style=\"background-color:#ffffcc; padding:12px; border:1px solid #ddddaa\"\n내용\n}}}", "내용"],
         ["[br] · [clearfix]", "강제 줄바꿈과 배치 초기화", "[br]", ""]
       ]},
       { title: "표", items: [
@@ -608,7 +652,7 @@
       ]},
       { title: "각주와 자동 표시", items: [
         ["[* 설명]", "본문에 각주 표시", "설명[* 각주 내용]", "설명"],
-        ["[*이름 설명] · [*이름]", "이름을 붙여 재사용하는 각주", "내용[*참고 학교 안내] 다음 내용[*참고]", "내용"],
+        ["[*참고 학교 안내] · [*참고]", "이름을 붙인 각주를 다시 사용해요.", "내용[*참고 학교 안내] 다음 내용[*참고]", "내용"],
         ["[각주] · [footnote]", "각주를 이 위치에 모아 표시", "[각주]\n", ""],
         ["[date] · [datetime]", "오늘 날짜와 접속 시각", "[date] · [datetime]", ""],
         ["[dday(2026-12-31)]", "기준일까지 남은 날 또는 지난 날", "[dday(2026-12-31)]", "2026-12-31"],
@@ -629,11 +673,11 @@
       const search = (example + " " + description).toLocaleLowerCase("ko");
       return '<article class="editor-syntax-card" data-syntax-search="' + escapeHtml(search) + '"><div class="editor-syntax-copy"><code>' + escapeHtml(example) + '</code><small>' + escapeHtml(description) + '</small></div><button type="button" data-action="insert-markup" data-markup="' + escapeHtml(markup) + '"' + (selection ? ' data-select-markup="' + escapeHtml(selection) + '"' : "") + '>넣기</button></article>';
     }).join("");
-    return '<p class="editor-guide-intro">문법을 몰라도 위의 버튼을 눌러 글을 꾸밀 수 있어요. 예시 옆 <strong>넣기</strong>를 누르면 편집기에 들어갑니다.</p>' +
+    return '<p class="editor-guide-intro">먼저 편집기 위의 서식 버튼을 써 보세요. 다른 문법은 예시 옆 <strong>넣기</strong>를 눌러 본문에 추가할 수 있어요.</p>' +
       '<label class="editor-guide-search">문법 찾기<input id="syntaxHelpSearch" type="search" placeholder="예: 표, 링크, 글자색" autocomplete="off"></label>' +
       groups.map((group, index) => '<details class="editor-guide-group"' + (index === 0 ? " open" : "") + '><summary>' + escapeHtml(group.title) + '</summary><div class="editor-syntax-list">' + rows(group.items) + '</div></details>').join("") +
       '<p class="editor-guide-empty" id="editorGuideEmpty" hidden>검색한 문법이 없어요. 다른 단어로 찾아보세요.</p>' +
-      '<p class="editor-markup-note">서현위키는 나무위키 문법 도움말 중 브라우저에서 안전하게 처리할 수 있는 기능을 지원합니다. 원격 파일 저장소가 필요한 첨부, 사이트 전용 틀, 임의 HTML·CSS·스크립트 실행은 가져올 수 없습니다. 사진 주소는 공개된 HTTPS 이미지를 사용하고, 개인정보가 담긴 이미지는 올리지 마세요. <a href="https://namu.wiki/w/나무위키:문법%20도움말" target="_blank" rel="noopener noreferrer">나무위키 원문 도움말</a></p>';
+      '<p class="editor-markup-note">사진은 편집기의 사진 업로드 버튼으로 넣고, 동영상은 재생 가능한 HTTPS 링크를 한 줄에 붙여 넣으세요. 일부 영상은 원본 사이트의 퍼가기 설정에 따라 재생되지 않을 수 있어요. 개인정보가 보이는 사진은 올리지 마세요. 임의 HTML·CSS·스크립트 실행이나 지원하지 않는 사이트 전용 문법은 사용할 수 없습니다.</p>';
   }
   window.WikiParser = { markdownHtml, inlineMarkdown: (line, context = {}) => renderInline(line, context.notes ? context : makeContext(line, context.headings || [], context)), documentHeadings, findSectionHeading, renderTocMarkup, countImages, countVideos, editorGuideHtml, migrateBody };
 })();
