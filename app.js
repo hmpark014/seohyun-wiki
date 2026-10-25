@@ -26,7 +26,7 @@ const state = {
   maintenance:{enabled:false,message:""}, maintenanceStatusLoaded:!isFirebaseConfigured, maintenanceUnsubscribe:null, maintenanceBusy:false,
   rankPeriod:"today", changeFilter:"all", discussionTab:"open", discussionId:null, specialTool:"stale", editorId:null, editingDraft:null, docId:null, results:[], searchSuggestions:[], searchSuggestionIndex:-1, searchTracking:{query:"",docId:null}, searchSyncIssue:null, firebase:null, firebaseReady:false, firebaseSetupPromise:null, gemini:null, aiSetupIssue:null, aiSetupErrorCode:null, searchUnsubscribe:null, chatSending:false,
   toastTimer:null, pendingApproval:null, communityUnsubscribers:[], editorPermissionUnsubscribe:null, editRequestsUnsubscribe:null, adminRequestsUnsubscribe:null, adminProfilesUnsubscribe:null, adminPermissionsUnsubscribe:null,
-  editorImageSelection:null, editorImageUploadBusy:false
+  editorImageSelection:null, editorVisualSelection:null, editorImageUploadBusy:false
 };
 let recommendationTimer=null;
 let featuredRecommendationCache={slot:null,id:null};
@@ -1480,9 +1480,16 @@ document.addEventListener("submit",event=>{
   }
 });
 document.addEventListener("mousedown",event=>{
-  if(event.target.closest("#editorForm [data-action='insert-markup'], #editorForm [data-action='editor-format'], #editorForm [data-action='upload-editor-image']"))event.preventDefault();
+  if(event.target.closest("#editorBlockStyle")){
+    const selection=window.getSelection();state.editorVisualSelection=selection?.rangeCount?selection.getRangeAt(0).cloneRange():null;
+  }
+  if(event.target.closest("#editorForm [data-action='insert-markup'], #editorForm [data-action='editor-format'], #editorForm [data-action='upload-editor-image'], #editorForm [data-action='visual-command'], #editorForm [data-action='visual-insert-link'], #editorForm [data-action='visual-insert-toc'], #editorForm [data-action='visual-insert-video'], #editorForm [data-action='visual-insert-table']"))event.preventDefault();
 });
 document.addEventListener("click",async event=>{
+  if(event.target.closest("#editorVisual")){
+    const link=event.target.closest("a");
+    if(link){event.preventDefault();event.stopPropagation();}
+  }
   const target=event.target.closest("[data-action],[data-view]");if(!target)return;
   const action=target.dataset.action,view=target.dataset.view,id=target.dataset.id;
   if(view){const extra={};if(target.dataset.special)extra.specialTool=target.dataset.special;if(view!=="discussions"||!target.dataset.id)extra.discussionId=null;navigate(view,extra);document.querySelector(".topbar-special")?.removeAttribute("open");return;}
@@ -1551,13 +1558,20 @@ document.addEventListener("click",async event=>{
       const area=document.querySelector("#docBody");
       if(!state.user){toast("사진을 올리려면 먼저 로그인해 주세요.");showLoginModal();break;}
       if(!area){toast("문서 본문 입력란을 찾을 수 없어요.");break;}
-      state.editorImageSelection={start:area.selectionStart,end:area.selectionEnd};
+      const visual=document.querySelector("#editorVisual"),selection=window.getSelection();
+      if(visual&&!document.querySelector("#editorVisualPane")?.hidden&&selection?.rangeCount&&visual.contains(selection.anchorNode))state.editorImageSelection={type:"visual",range:selection.getRangeAt(0).cloneRange()};
+      else state.editorImageSelection={type:"source",start:area.selectionStart,end:area.selectionEnd};
       const picker=document.querySelector("#editorImageFile");
       if(picker){picker.value="";picker.click();}
       break;
     }
     case "editor-format":formatEditorText(target.dataset.before||"",target.dataset.after||"",target.dataset.placeholder||"텍스트");break;
-    case "editor-pane":setEditorPane(target.dataset.pane||"write");break;
+    case "visual-command":runVisualEditorCommand(target.dataset.command||"",target.dataset.value||"");break;
+    case "visual-insert-link":insertVisualEditorLink();break;
+    case "visual-insert-toc":insertVisualToc(target.dataset.toc||"normal");break;
+    case "visual-insert-video":insertVisualVideo();break;
+    case "visual-insert-table":insertVisualTable();break;
+    case "editor-pane":setEditorPane(target.dataset.pane||"visual");break;
     case "footer-about":modalOpen(`${modalHeader("서현위키 이용 안내", "학교 정보를 함께 만들어요.")}<p class="modal-copy">확인 가능한 정보를 출처와 함께 기록하고, 개인정보와 다른 사람을 식별할 수 있는 내용을 게시하지 말아 주세요. 문서 제한을 넘는 편집은 관리자 승인을 요청할 수 있습니다.</p><div class="modal-actions"><button class="button button-primary" data-action="close-modal">확인</button></div>`);break;
   }
 });
@@ -1578,6 +1592,11 @@ document.addEventListener("input",event=>{
     state.editingDraft={title:document.querySelector("#docTitle")?.value||"",category:document.querySelector("#docCategory")?.value||"",body:event.target.value};
     const form=document.querySelector("#editorForm");if(form){const submit=form.querySelector('button[type="submit"]');const chars=event.target.value.length, images=countImages(event.target.value), videos=countVideos(event.target.value);const over=chars>state.config.chars||images>state.config.images||videos>state.config.videos;const count=form.querySelector(".limit-count");count.className=`limit-count ${over?"over":chars>state.config.chars*.8?"near":""}`;count.textContent=over?"관리자 승인 필요":chars>state.config.chars*.8?"제한에 가까워요":"저장 공간 절약 모드";form.querySelectorAll(".limit-chip").forEach((el,i)=>el.innerHTML=[`글자 <strong>${chars.toLocaleString()} / ${state.config.chars.toLocaleString()}</strong>`,`사진 <strong>${images} / ${state.config.images}</strong>`,`동영상 <strong>${videos} / ${state.config.videos}</strong>`][i]);const current=state.editorId?state.docs.find(doc=>doc.id===state.editorId):null;submit.textContent=editorSubmitLabel(current,over);refreshEditorPreview();}
   }
+  if(event.target.id==="editorVisual"){
+    event.target.dataset.dirty="true";
+    const area=document.querySelector("#docBody");
+    if(area){area.value=serializeVisualEditor(event.target);area.dispatchEvent(new Event("input",{bubbles:true}));}
+  }
   if(event.target.id==="docTitle"||event.target.id==="docCategory"){
     state.editingDraft={title:document.querySelector("#docTitle")?.value||"",category:document.querySelector("#docCategory")?.value||"",body:document.querySelector("#docBody")?.value||""};
   }
@@ -1590,6 +1609,7 @@ document.addEventListener("input",event=>{
 document.addEventListener("change",event=>{
   if(event.target.id==="adminDocFilter")filterAdminDocRows();
   if(event.target.id==="settingsArticleSize")savePreference("articleSize",event.target.value);
+  if(event.target.id==="editorBlockStyle")runVisualEditorCommand("formatBlock",event.target.value);
   if(event.target.id==="docCategory")state.editingDraft={title:document.querySelector("#docTitle")?.value||"",category:event.target.value,body:document.querySelector("#docBody")?.value||""};
   if(event.target.id==="editorImageFile"){
     const file=event.target.files?.[0];
@@ -1620,6 +1640,7 @@ function toggleTheme(){const next=document.body.classList.contains("dark")?"ligh
 function syncThemeButton(){const button=document.querySelector("#themeButton");if(!button)return;const dark=document.body.classList.contains("dark");button.setAttribute("aria-label",dark?"라이트 모드로 전환":"다크 모드로 전환");button.title=dark?"라이트 모드로 전환":"다크 모드로 전환";}
 function saveLimits(){document.querySelectorAll("[data-setting]").forEach(input=>{const value=Number(input.value);if(Number.isFinite(value))state.config[input.dataset.setting]=Math.max(0,Math.min(input.dataset.setting==="chars"?50000:20,value));});if(state.config.chars<500)state.config.chars=500;saveLocal();modalClose();render();toast("작성 제한을 저장했어요. Firestore 보안 규칙도 같은 값으로 업데이트해 주세요.");}
 function insertMarkup(markup,selectMarkup=""){
+  setEditorPane("source");
   const area=document.querySelector("#docBody");if(!area)return;
   const start=area.selectionStart,end=area.selectionEnd,selected=area.value.slice(start,end);
   let inserted=String(markup||"");
@@ -1637,8 +1658,9 @@ async function uploadEditorImage(file){
   const finish=()=>{
     const currentPicker=document.querySelector("#editorImageFile"),currentButton=document.querySelector("#editorForm [data-action='upload-editor-image']"),currentSubmit=document.querySelector('#editorForm button[type="submit"]');
     if(currentPicker)currentPicker.value="";
-    if(currentButton){currentButton.disabled=false;currentButton.textContent="갤러리에서 사진 선택";}
+    if(currentButton){currentButton.disabled=false;currentButton.textContent="사진 추가";}
     if(currentSubmit)currentSubmit.disabled=false;
+    state.editorImageSelection=null;
     state.editorImageUploadBusy=false;
   };
   if(state.editorImageUploadBusy)return;
@@ -1671,7 +1693,7 @@ async function uploadEditorImage(file){
     if(status)status.textContent="Firebase Storage 설정이 끝나면 사진 업로드를 사용할 수 있어요.";
     finish();return;
   }
-  const area=document.querySelector("#docBody");
+  const area=document.querySelector("#docBody"),visual=document.querySelector("#editorVisual");
   if(!area){toast("문서 편집 화면이 닫혀 사진을 넣지 못했어요.");finish();return;}
   if(button)button.textContent="사진 올리는 중…";
   if(status)status.textContent="사진을 저장소에 올리고 있어요…";
@@ -1686,12 +1708,15 @@ async function uploadEditorImage(file){
       await state.firebase.storageSdk.deleteObject(uploaded.ref).catch(()=>{});
       throw Object.assign(new Error("편집 화면이 닫혔습니다."),{code:"wiki/editor-closed"});
     }
-    const markup=`[[파일:${url}]]`;
-    const selection=state.editorImageSelection||{start:area.selectionStart,end:area.selectionEnd};
-    const start=Math.min(Math.max(0,selection.start),area.value.length),end=Math.min(Math.max(start,selection.end),area.value.length);
-    area.setRangeText(markup,start,end,"end");
-    area.setSelectionRange(start+markup.length,start+markup.length);
-    area.focus();area.dispatchEvent(new Event("input",{bubbles:true}));
+    const selection=state.editorImageSelection||{type:"source",start:area.selectionStart,end:area.selectionEnd};
+    if(selection.type==="visual"&&visual?.isConnected){
+      const figure=document.createElement("figure");figure.className="wiki-image";
+      const image=document.createElement("img");image.src=url;image.alt="문서 사진";image.loading="lazy";image.decoding="async";figure.append(image);
+      insertVisualNode(visual,figure,selection.range);
+    }else{
+      const markup=`[[파일:${url}]]`,start=Math.min(Math.max(0,selection.start||0),area.value.length),end=Math.min(Math.max(start,selection.end||start),area.value.length);
+      area.setRangeText(markup,start,end,"end");area.setSelectionRange(start+markup.length,start+markup.length);area.focus();area.dispatchEvent(new Event("input",{bubbles:true}));
+    }
     state.editorImageSelection=null;
     if(status)status.textContent="사진을 올려 본문에 넣었어요. 저장 전 미리보기를 확인해 주세요.";
     toast("사진을 올려 본문에 넣었어요.");
@@ -1712,11 +1737,183 @@ function formatEditorText(before,after,placeholder="텍스트"){
   area.focus();area.dispatchEvent(new Event("input",{bubbles:true}));
 }
 function setEditorPane(pane){
-  const preview=pane==="preview";
-  document.querySelector("#editorWritePane")?.toggleAttribute("hidden",preview);
+  const preview=pane==="preview",source=pane==="source",visual=document.querySelector("#editorVisual"),area=document.querySelector("#docBody");
+  if(source){if(visual&&visual.dataset.dirty==="true")syncVisualEditorToSource();}
+  else if(preview){if(visual&&visual.dataset.dirty==="true")syncVisualEditorToSource();}
+  else if(visual&&area){
+    if(needsSourceEditor(area.value)&&!confirm("이 문서에는 고급 위키 문법이 있어요. 시각 편집으로 바꾸면 일부 서식이 단순해질 수 있습니다. 그래도 바꿀까요?"))return;
+    loadVisualEditorFromSource();
+  }
+  document.querySelector("#editorVisualPane")?.toggleAttribute("hidden",source||preview);
+  document.querySelector("#editorSourcePane")?.toggleAttribute("hidden",!source);
   document.querySelector("#editorPreviewPane")?.toggleAttribute("hidden",!preview);
-  document.querySelectorAll(".editor-pane-tabs [data-pane]").forEach(button=>button.setAttribute("aria-pressed",String(button.dataset.pane===(preview?"preview":"write"))));
+  document.querySelectorAll(".editor-pane-tabs [data-pane]").forEach(button=>button.setAttribute("aria-pressed",String(button.dataset.pane===(preview?"preview":source?"source":"visual"))));
   if(preview)refreshEditorPreview();
+  return true;
+}
+function needsSourceEditor(body=""){
+  const text=String(body||"");
+  return /\{\{\{|\[\*\s|^\s*#redirect\b|^\s*\[\[(?:include|분류|category)\s*[:(]|\|(?:table(?:align|bgcolor|color|bordercolor)|rowspan|colspan|align|bgcolor|color|width)\s*=|\[\[파일:[^\]]+\|(?:width|height|align|border-radius|object-fit)\s*=|^\s+[A-Za-z]\.(?:#\d+)?\s|^\s+\d+\.#\d+\s|\[\[(?:ruby|clearfix|age|date|br|anchor)\(|\[(?:date|datetime|dday|age|ruby|br|clearfix|footnote|각주|anchor)\b/im.test(text);
+}
+function visualEditorHtml(body=""){
+  const source=WikiParser.migrateBody(String(body||"")),headings=documentHeadings(source);
+  const toc='<div class="editor-toc-placeholder" data-wiki-toc="normal" contenteditable="false"><strong>목차</strong><span>저장하면 문서 제목 목록이 표시돼요.</span></div>';
+  const container=document.createElement("div");
+  container.innerHTML=markdownHtml(source,headings.map(item=>item.id),toc);
+  container.querySelectorAll("button.wiki-inline-link").forEach(button=>{
+    const span=document.createElement("span");span.className="editor-wiki-link";span.dataset.wikiTarget=(button.dataset.title||"")+(button.dataset.section?`#${button.dataset.section}`:"");span.innerHTML=button.innerHTML;button.replaceWith(span);
+  });
+  container.querySelectorAll("a.wiki-section-link").forEach(anchor=>{
+    const id=anchor.getAttribute("href")?.slice(1)||"",heading=headings.find(item=>item.id===id),span=document.createElement("span");
+    span.className="editor-wiki-link";span.dataset.wikiTarget="#"+(heading?.title||id.replace(/^wiki-anchor-/,""));span.innerHTML=anchor.innerHTML;anchor.replaceWith(span);
+  });
+  container.querySelectorAll(".article-toc").forEach(nav=>{
+    const placeholder=document.createElement("div");placeholder.className="editor-toc-placeholder";placeholder.dataset.wikiToc="normal";placeholder.setAttribute("contenteditable","false");placeholder.innerHTML='<strong>목차</strong><span>저장하면 문서 제목 목록이 표시돼요.</span>';nav.replaceWith(placeholder);
+  });
+  container.querySelectorAll("a[href]").forEach(anchor=>{
+    if(anchor.closest(".wiki-footnote-ref,.wiki-footnote-back"))return;
+    const span=document.createElement("span");span.className="editor-external-link";span.dataset.href=anchor.getAttribute("href")||"";span.innerHTML=anchor.innerHTML;anchor.replaceWith(span);
+  });
+  return container.innerHTML;
+}
+function loadVisualEditorFromSource(){
+  const visual=document.querySelector("#editorVisual"),area=document.querySelector("#docBody");if(!visual||!area)return;
+  visual.innerHTML=visualEditorHtml(area.value);visual.dataset.dirty="false";
+}
+function visualInlineMarkup(node,root){
+  if(node.nodeType===Node.TEXT_NODE)return node.nodeValue||"";
+  if(node.nodeType!==Node.ELEMENT_NODE)return "";
+  const element=node,tag=element.tagName.toLowerCase();
+  if(tag==="br")return "\n";
+  if(element.classList.contains("editor-toc-placeholder"))return "[tableofcontents]";
+  if(element.classList.contains("editor-wiki-link")||element.classList.contains("wiki-inline-link")){
+    const title=String(element.dataset.wikiTarget||element.dataset.title||"").trim(),label=visualInlineChildren(element,root).trim();return title?`[[${title}${label&&label!==title?`|${label}`:""}]]`:label;
+  }
+  if(element.classList.contains("editor-external-link")){
+    const href=safeHttpUrl(element.dataset.href||element.getAttribute("href")||""),label=visualInlineChildren(element,root).trim();return href?`[[${href}${label&&label!==href?`|${label}`:""}]]`:label;
+  }
+  if(tag==="a"){
+    const href=safeHttpUrl(element.getAttribute("href")||""),label=visualInlineChildren(element,root).trim();return href?`[[${href}${label&&label!==href?`|${label}`:""}]]`:label;
+  }
+  if(tag==="img")return element.src?`[[파일:${element.src}]]`:"";
+  if(tag==="sup"&&element.classList.contains("wiki-footnote-ref")){
+    const href=element.querySelector("a")?.getAttribute("href")||"",noteId=href.match(/#wiki-footnote-(\d+)/)?.[1],note=noteId&&root.querySelector(`#wiki-footnote-${noteId}`);
+    if(note){const copy=note.cloneNode(true);copy.querySelectorAll("a").forEach(link=>link.remove());const text=visualInlineChildren(copy,root).replace(/↩/g,"").trim();if(text)return `[* ${text}]`;}
+  }
+  const content=visualInlineChildren(element,root);
+  if(tag==="strong"||tag==="b")return content?`'''${content}'''`:"";
+  if(tag==="u")return content?`__${content}__`:"";
+  if(tag==="del"||tag==="s"||tag==="strike")return content?`~~${content}~~`:"";
+  if(tag==="sup")return content?`^^${content}^^`:"";
+  if(tag==="sub")return content?`,,${content},,`:"";
+  if(tag==="code")return content?`{{{${content}}}}`:"";
+  if(tag==="span"&&element.style.fontWeight&&Number(element.style.fontWeight)>=600)return content?`'''${content}'''`:"";
+  if(tag==="span"&&/underline/i.test(element.style.textDecorationLine||element.style.textDecoration))return content?`__${content}__`:"";
+  if(tag==="span"&&/line-through/i.test(element.style.textDecorationLine||element.style.textDecoration))return content?`~~${content}~~`:"";
+  if(element.classList.contains("wiki-colored-text")){
+    const foreground=element.style.color,background=element.style.backgroundColor;
+    if(foreground||background)return `{{{#${foreground||"inherit"}${background?`,${background}`:""} ${content}}}}`;
+  }
+  return content;
+}
+function visualInlineChildren(element,root){return [...element.childNodes].map(node=>visualInlineMarkup(node,root)).join("");}
+function serializeVisualList(list,root,depth=0){
+  const tag=list.tagName.toLowerCase(),marker=tag==="ol"?"1.":"*",lines=[];
+  [...list.children].filter(item=>item.tagName?.toLowerCase()==="li").forEach(item=>{
+    const nested=[...item.children].filter(child=>["UL","OL"].includes(child.tagName));
+    const content=[...item.childNodes].filter(child=>!(child.nodeType===Node.ELEMENT_NODE&&["UL","OL"].includes(child.tagName))).map(child=>visualInlineMarkup(child,root)).join("").trim();
+    lines.push(`${" ".repeat(depth+1)}${marker} ${content}`);
+    nested.forEach(child=>lines.push(serializeVisualList(child,root,depth+1)));
+  });
+  return lines.join("\n");
+}
+function serializeVisualNode(node,root){
+  if(node.nodeType===Node.TEXT_NODE)return node.nodeValue?.trim()?node.nodeValue.trim():"";
+  if(node.nodeType!==Node.ELEMENT_NODE)return "";
+  const element=node,tag=element.tagName.toLowerCase();
+  if(element.classList.contains("wiki-footnotes"))return "";
+  if(element.classList.contains("editor-toc-placeholder"))return `[tableofcontents${element.dataset.wikiToc==="hide"?"(hide)":""}]`;
+  if(element.classList.contains("wiki-toc-folding"))return "[tableofcontents(hide)]";
+  if(element.classList.contains("wiki-image")){
+    const image=element.querySelector("img"),url=safeHttpUrl(image?.getAttribute("src")||image?.src||"");
+    const caption=element.querySelector("figcaption")?.textContent?.trim()||"";return url?`[[파일:${url}${caption?`|alt=${caption}`:""}]]`:"";
+  }
+  if(element.classList.contains("wiki-video")){
+    const src=element.querySelector("iframe")?.getAttribute("src")||element.querySelector("video source")?.getAttribute("src")||"",youtube=src.match(/youtube-nocookie\.com\/embed\/([\w-]{6,20})/i)?.[1],vimeo=src.match(/vimeo\.com\/video\/(\d{5,12})/i)?.[1];
+    return youtube?`[youtube(${youtube})]`:vimeo?`[vimeo(${vimeo})]`:safeHttpUrl(src);
+  }
+  if(tag==="details"&&element.classList.contains("wiki-toc-folding"))return "[tableofcontents(hide)]";
+  if(tag==="details"&&element.classList.contains("wiki-folding")){
+    const label=element.querySelector(":scope > summary")?.textContent?.trim()||"내용 펼치기",content=[...element.children].filter(child=>child.tagName!=="SUMMARY").map(child=>serializeVisualChildren(child,root)).filter(Boolean).join("\n\n");
+    return `{{{#!folding ${label}\n${content}\n}}}`;
+  }
+  if(element.classList.contains("wiki-table-wrap")||tag==="table"){
+    const table=tag==="table"?element:element.querySelector("table");if(!table)return "";
+    return [...table.querySelectorAll("tr")].map(row=>`|| ${[...row.querySelectorAll("th,td")].map(cell=>visualInlineChildren(cell,root).trim()).join(" || ")} ||`).join("\n");
+  }
+  if(tag==="ul"||tag==="ol")return serializeVisualList(element,root);
+  if(/^h[1-6]$/.test(tag)){const level=Math.max(1,Math.min(6,Number(tag.slice(1))-1)),marks="=".repeat(level),text=visualInlineChildren(element,root).trim();return text?`${marks} ${text} ${marks}`:"";}
+  if(tag==="blockquote")return visualInlineChildren(element,root).split("\n").map(line=>line?`> ${line}`:">").join("\n");
+  if(tag==="hr")return "----";
+  if(tag==="pre")return `{{{\n${element.textContent||""}\n}}}`;
+  if(tag==="p")return visualInlineChildren(element,root).trim();
+  if(element.classList.contains("wiki-clearfix"))return "";
+  return serializeVisualChildren(element,root);
+}
+function serializeVisualChildren(element,root){return [...element.childNodes].map(node=>serializeVisualNode(node,root)).filter(Boolean).join("\n\n");}
+function serializeVisualEditor(editor){return serializeVisualChildren(editor,editor).replace(/\n{3,}/g,"\n\n").trim();}
+function syncVisualEditorToSource(){
+  const visual=document.querySelector("#editorVisual"),area=document.querySelector("#docBody");if(!visual||!area)return;
+  area.value=serializeVisualEditor(visual);area.dispatchEvent(new Event("input",{bubbles:true}));visual.dataset.dirty="false";
+}
+function runVisualEditorCommand(command,value=""){
+  const visual=document.querySelector("#editorVisual"),area=document.querySelector("#docBody");if(!visual||!area)return;
+  if(document.querySelector("#editorVisualPane")?.hidden&&!setEditorPane("visual"))return;
+  const savedRange=state.editorVisualSelection,selection=window.getSelection();
+  if(savedRange&&visual.contains(savedRange.commonAncestorContainer)){selection?.removeAllRanges();selection?.addRange(savedRange);}
+  state.editorVisualSelection=null;visual.focus();
+  const commandValue=command==="formatBlock"&&value?`<${value}>`:value||null;
+  try{document.execCommand(command,false,commandValue);}catch(error){console.warn("시각 편집 명령을 적용하지 못했어요:",error);}
+  visual.dataset.dirty="true";syncVisualEditorToSource();
+}
+function insertVisualNode(editor,node,range=null){
+  if(!editor)return false;
+  const selection=window.getSelection(),targetRange=range&&editor.contains(range.commonAncestorContainer)?range.cloneRange():document.createRange();
+  if(!(range&&editor.contains(range.commonAncestorContainer))){targetRange.selectNodeContents(editor);targetRange.collapse(false);}
+  try{targetRange.deleteContents();targetRange.insertNode(node);targetRange.setStartAfter(node);targetRange.collapse(true);selection?.removeAllRanges();selection?.addRange(targetRange);editor.focus();editor.dataset.dirty="true";editor.dispatchEvent(new Event("input",{bubbles:true}));return true;}
+  catch{return false;}
+}
+function insertVisualEditorLink(){
+  const visual=document.querySelector("#editorVisual"),selection=window.getSelection();if(!visual)return;
+  if(document.querySelector("#editorVisualPane")?.hidden&&!setEditorPane("visual"))return;
+  const range=selection?.rangeCount?selection.getRangeAt(0).cloneRange():null,selected=selection?.toString().trim()||"",target=prompt("연결할 문서 제목 또는 웹 주소를 입력해 주세요.",selected);
+  if(!target)return;
+  const url=safeHttpUrl(target.trim());
+  if(url){
+    if(!selected){const text=document.createTextNode(url);insertVisualNode(visual,text,range);const newSelection=window.getSelection(),linkRange=document.createRange();linkRange.selectNode(text);newSelection?.removeAllRanges();newSelection?.addRange(linkRange);document.execCommand("createLink",false,url);visual.dispatchEvent(new Event("input",{bubbles:true}));}
+    else{if(range&&visual.contains(range.commonAncestorContainer)){selection?.removeAllRanges();selection?.addRange(range);}visual.focus();document.execCommand("createLink",false,url);visual.dataset.dirty="true";syncVisualEditorToSource();}
+  }else{
+    const span=document.createElement("span");span.className="editor-wiki-link";span.dataset.wikiTarget=target.trim();span.textContent=selected||target.trim();insertVisualNode(visual,span,range);
+  }
+}
+function insertVisualToc(type="normal"){
+  const visual=document.querySelector("#editorVisual");if(!visual)return;if(document.querySelector("#editorVisualPane")?.hidden&&!setEditorPane("visual"))return;
+  const placeholder=document.createElement("div");placeholder.className="editor-toc-placeholder";placeholder.dataset.wikiToc=type;placeholder.setAttribute("contenteditable","false");placeholder.innerHTML=`<strong>${type==="hide"?"접힌 목차":"목차"}</strong><span>저장하면 문서 제목 목록이 표시돼요.</span>`;
+  const selection=window.getSelection(),range=selection?.rangeCount?selection.getRangeAt(0).cloneRange():null;insertVisualNode(visual,placeholder,range);
+}
+function insertVisualVideo(){
+  const visual=document.querySelector("#editorVisual");if(!visual)return;if(document.querySelector("#editorVisualPane")?.hidden&&!setEditorPane("visual"))return;
+  const selection=window.getSelection(),range=selection?.rangeCount?selection.getRangeAt(0).cloneRange():null;
+  const raw=prompt("YouTube, Vimeo 또는 공개 동영상 파일 주소를 붙여 넣어 주세요.","");if(raw===null)return;const url=safeHttpUrl(raw);if(!url){toast("올바른 https 동영상 주소를 입력해 주세요.");return;}
+  let parsed;try{parsed=new URL(url);}catch{toast("올바른 https 동영상 주소를 입력해 주세요.");return;}
+  const host=parsed.hostname.toLowerCase().replace(/^www\./,""),supportedHost=["youtube.com","m.youtube.com","music.youtube.com","youtube-nocookie.com","youtu.be","vimeo.com","player.vimeo.com"].includes(host),directFile=/\.(?:mp4|webm|ogv)$/i.test(parsed.pathname);
+  if(parsed.protocol!=="https:"||(!supportedHost&&!directFile)){toast("YouTube·Vimeo 또는 HTTPS 동영상 파일 주소를 넣어 주세요.");return;}
+  const video=document.createElement("p");video.textContent=url;insertVisualNode(visual,video,range);
+}
+function insertVisualTable(){
+  const visual=document.querySelector("#editorVisual");if(!visual)return;if(document.querySelector("#editorVisualPane")?.hidden&&!setEditorPane("visual"))return;
+  const table=document.createElement("table");table.className="wiki-table";table.innerHTML="<tbody><tr><td>항목</td><td>내용</td></tr><tr><td>항목</td><td>내용</td></tr></tbody>";
+  const wrapper=document.createElement("div");wrapper.className="wiki-table-wrap";wrapper.append(table);const selection=window.getSelection(),range=selection?.rangeCount?selection.getRangeAt(0).cloneRange():null;insertVisualNode(visual,wrapper,range);
 }
 function refreshEditorPreview(){
   const preview=document.querySelector("#editorPreview"),body=document.querySelector("#docBody")?.value||"";
@@ -1837,38 +2034,36 @@ function renderEditor(){
   const current=state.editorId?state.docs.find(d=>d.id===state.editorId):null,draft=state.editingDraft||{title:current?.title||"",category:current?.category||"",body:current?docEditorBody(current):""};
   const chars=draft.body.length,imageCount=countImages(draft.body),videoCount=countVideos(draft.body),over=chars>state.config.chars||imageCount>state.config.images||videoCount>state.config.videos,near=chars>state.config.chars*.8;
   const approvalInfo=!current?"새 문서는 관리자 승인 후 공개됩니다.":current?.editRestricted&&!state.isAdmin?"이 문서는 편집 제안을 제출하고 권한 있는 이용자의 승인을 받아야 반영됩니다.":"일반 문서는 작성자가 아니어도 학교 계정으로 편집할 수 있고 저장 즉시 반영됩니다.";
-  const grammar=WikiParser.editorGuideHtml();
+  const grammar=WikiParser.editorGuideHtml(),sourceFirst=needsSourceEditor(draft.body);
   return `<div class="content-page"><div class="page-title-row"><div><p class="eyebrow">Write together</p><h1 class="page-title">${current?"문서 편집":"새 문서 만들기"}</h1><p class="page-subtitle">확인한 정보를 알기 쉽게 정리해 주세요.</p></div></div><form class="panel editor-panel" id="editorForm"><div class="admin-callout">${icons.shield}<span>${approvalInfo} 글자 <strong>${state.config.chars.toLocaleString()}자</strong>, 사진 링크 <strong>${state.config.images}개</strong>, 동영상 링크 <strong>${state.config.videos}개</strong> 제한을 넘긴 편집도 승인 후 반영됩니다.</span></div>
     <div class="field"><label for="docTitle">문서 제목</label><input id="docTitle" name="title" required maxlength="80" placeholder="예: 동아리, 급식, 학교 행사" value="${esc(draft.title)}"></div>
     <div class="field"><label for="docCategory">분류</label><select id="docCategory" name="category">${WIKI_CATEGORIES.map(category=>`<option value="${esc(category)}" ${draft.category===category?"selected":""}>${esc(category)}</option>`).join("")}</select></div>
-    <div class="field"><label for="docBody">본문</label>
+    <div class="field"><div class="field-label">본문</div>
       <div class="editor-toolbar editor-toolbar-rich" role="toolbar" aria-label="문서 작성 도구">
-        <span class="editor-toolbar-label">자주 쓰는 도구</span>
-        <button type="button" data-action="editor-format" data-before="'''" data-after="'''" data-placeholder="굵게">굵게</button>
-        <button type="button" data-action="insert-markup" data-markup="= 큰 제목 =\n\n" data-select-markup="큰 제목">제목</button>
-        <button type="button" data-action="insert-markup" data-markup="== 소제목 ==\n\n" data-select-markup="소제목">소제목</button>
-        <button type="button" data-action="insert-markup" data-markup=" * 항목\n * 다음 항목\n" data-select-markup="항목">목록</button>
-        <button type="button" data-action="insert-markup" data-markup="[tableofcontents]\n">목차</button>
+        <select id="editorBlockStyle" aria-label="문단 스타일" title="문단 스타일"><option value="p">문단</option><option value="h2">제목</option><option value="h3">하위 제목</option><option value="blockquote">인용</option></select>
+        <button type="button" class="editor-tool-emphasis" data-action="visual-command" data-command="bold" aria-label="굵게" title="굵게"><strong>B</strong></button>
+        <button type="button" data-action="visual-command" data-command="underline" aria-label="밑줄" title="밑줄"><u>U</u></button>
+        <button type="button" data-action="visual-command" data-command="strikeThrough" aria-label="취소선" title="취소선"><s>S</s></button>
+        <button type="button" data-action="visual-insert-link" aria-label="링크 추가" title="문서 또는 웹 링크 추가">링크</button>
+        <button type="button" data-action="visual-command" data-command="insertUnorderedList" aria-label="글머리 목록" title="글머리 목록">• 목록</button>
+        <button type="button" data-action="visual-command" data-command="insertOrderedList" aria-label="번호 목록" title="번호 목록">1. 목록</button>
+        <button type="button" data-action="visual-insert-toc" data-toc="normal" title="목차 추가">목차</button>
         <button type="button" data-action="upload-editor-image" ${state.editorImageUploadBusy?"disabled":""}>사진 추가</button>
-        <button type="button" data-action="insert-markup" data-markup="https://youtu.be/영상ID\n" data-select-markup="https://youtu.be/영상ID">영상 링크</button>
-        <details class="editor-extra-tools"><summary>더 보기</summary><div class="editor-extra-tools-menu" role="group" aria-label="추가 작성 도구">
-          <button type="button" data-action="editor-format" data-before="__" data-after="__" data-placeholder="밑줄">밑줄</button>
-          <button type="button" data-action="editor-format" data-before="~~" data-after="~~" data-placeholder="취소선">취소선</button>
-          <button type="button" data-action="insert-markup" data-markup=" 1. 항목\n 1. 다음 항목\n" data-select-markup="항목">번호 목록</button>
-          <button type="button" data-action="insert-markup" data-markup=" > 인용문\n" data-select-markup="인용문">인용</button>
-          <button type="button" data-action="insert-markup" data-markup="[[문서명|표시할 글자]]" data-select-markup="표시할 글자">문서 링크</button>
-          <button type="button" data-action="insert-markup" data-markup="[[https://주소|표시할 글자]]" data-select-markup="표시할 글자">웹 링크</button>
-          <button type="button" data-action="insert-markup" data-markup="|| 제목 || 내용 ||\n|| 내용 || 내용 ||\n" data-select-markup="제목">표</button>
-          <button type="button" data-action="insert-markup" data-markup="[* 각주 내용]" data-select-markup="각주 내용">각주</button>
+        <details class="editor-extra-tools"><summary>＋ 추가</summary><div class="editor-extra-tools-menu" role="group" aria-label="추가 편집 도구">
+          <button type="button" data-action="visual-insert-video">동영상 넣기</button>
+          <button type="button" data-action="visual-insert-table">표 넣기</button>
+          <button type="button" data-action="visual-insert-toc" data-toc="hide">접힌 목차</button>
+          <button type="button" data-action="visual-command" data-command="insertHorizontalRule">구분선</button>
         </div></details>
       </div>
       <input id="editorImageFile" type="file" accept="image/*" aria-label="업로드할 사진 파일 선택" hidden>
       <span id="editorImageUploadStatus" class="editor-image-upload-status" role="status" aria-live="polite">${state.editorImageUploadBusy?"사진을 저장소에 올리고 있어요…":""}</span>
       <details class="editor-markup-help"><summary>고급 문법 안내 (필요할 때만)</summary><div class="editor-markup-content">${grammar}</div></details>
-      <div class="editor-pane-tabs" role="tablist" aria-label="본문 보기 방식"><button type="button" data-action="editor-pane" data-pane="write" aria-pressed="true">작성</button><button type="button" data-action="editor-pane" data-pane="preview" aria-pressed="false">미리보기</button><span>미리보기에서 저장 전 결과를 확인할 수 있어요.</span></div>
-      <div id="editorWritePane" class="editor-source-pane"><textarea id="docBody" name="body" required placeholder="문서 내용을 여기에 적어 주세요. 위 작성 도구로 제목, 목차, 사진 등을 넣을 수 있어요.">${esc(draft.body)}</textarea></div>
+      <div class="editor-pane-tabs" role="tablist" aria-label="본문 편집 방식"><button type="button" data-action="editor-pane" data-pane="visual" aria-pressed="${!sourceFirst}">시각 편집</button><button type="button" data-action="editor-pane" data-pane="source" aria-pressed="${sourceFirst}">문법 편집</button><button type="button" data-action="editor-pane" data-pane="preview" aria-pressed="false">미리보기</button><span>내용을 쓰고 도구를 눌러 서식을 적용해요.</span></div>
+      <div id="editorVisualPane" class="editor-visual-pane" ${sourceFirst?"hidden":""}><div id="editorVisual" class="editor-visual-canvas article-body" contenteditable="true" role="textbox" aria-label="문서 본문 시각 편집" aria-multiline="true" data-placeholder="여기에 내용을 입력해 주세요. 제목과 목록은 위 도구에서 고를 수 있어요.">${visualEditorHtml(draft.body)}</div></div>
+      <div id="editorSourcePane" class="editor-source-pane" ${sourceFirst?"":"hidden"}><textarea id="docBody" name="body" placeholder="위키 문법으로 직접 편집할 수 있어요.">${esc(draft.body)}</textarea></div>
       <div id="editorPreviewPane" class="editor-preview-pane" hidden><div class="editor-preview-note">저장 전 미리보기 · 링크는 문서에 저장한 뒤 사용할 수 있어요.</div><div id="editorPreview" class="article-body">${editorPreviewHtml(draft.body)}</div></div>
-      <span class="field-hint">사진은 ‘사진 추가’ 버튼으로 올려요. YouTube·Vimeo 주소나 공개된 MP4·WebM·OGV 영상 파일 주소를 한 줄에 붙여 넣으면 재생 화면으로 표시돼요. 업로드한 사진은 문서와 함께 공개되니 학생 얼굴이나 개인 정보는 올리지 마세요.</span>
+      <span class="field-hint">사진은 ‘사진 추가’, 동영상은 ‘＋ 추가’에서 넣을 수 있어요. 업로드한 사진은 문서와 함께 공개되니 학생 얼굴이나 개인 정보는 올리지 마세요.</span>
     </div>
     <div class="limits-row"><span class="limit-chip">글자 <strong>${chars.toLocaleString()} / ${state.config.chars.toLocaleString()}</strong></span><span class="limit-chip">사진 <strong>${imageCount} / ${state.config.images}</strong></span><span class="limit-chip">동영상 <strong>${videoCount} / ${state.config.videos}</strong></span><span class="limit-count ${over?"over":near?"near":""}">${over?"관리자 승인 필요":near?"제한에 가까워요":"저장 공간 절약 모드"}</span></div><div class="editor-actions"><span class="editor-actions-left">문서는 저장 후 검색과 AI 답변에 반영됩니다.</span><div class="editor-actions-right"><button type="submit" class="button button-primary" ${state.editorImageUploadBusy?"disabled":""}>${editorSubmitLabel(current,over)}</button></div></div></form></div>`;
 }

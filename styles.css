@@ -606,3 +606,30 @@ body.dark .article-body .wiki-table{border-color:var(--wiki-table-border-dark,va
 body.dark .article-body .wiki-table td{border-color:var(--wiki-border-dark,var(--wiki-border-light,var(--wiki-table-border-dark,var(--wiki-table-border-light,#383a37))))}
 .editor-source-pane[hidden],.editor-preview-pane[hidden]{display:none!important}
 @media(max-width:700px){.editor-toolbar-rich{gap:5px;padding:7px}.editor-toolbar-rich button{min-height:30px;padding:0 8px;font-size:10px}.editor-pane-tabs span{font-size:9px}.editor-source-pane textarea{min-height:340px}.editor-preview-pane{min-height:340px;padding:13px}.editor-preview-note{margin:-13px -13px 13px}.editor-syntax-card{align-items:flex-start}.editor-toolbar-separator{display:none}}
+
+/* Visual wiki editor: ordinary writing stays readable, while the source grammar remains available on demand. */
+.editor-visual-pane[hidden],.editor-source-pane[hidden],.editor-preview-pane[hidden]{display:none!important}
+.field-label{display:block;margin-bottom:7px;color:#454b5a;font-size:11px;font-weight:700}
+.editor-toolbar-rich{flex-wrap:wrap;overflow:visible}
+.editor-toolbar-rich select{min-width:104px;min-height:33px;padding:0 27px 0 10px;border:1px solid #e4e5ee;border-radius:7px;background:#fff;color:#424858;font-family:inherit;font-size:11px;font-weight:600;cursor:pointer}
+.editor-toolbar-rich .editor-tool-emphasis{min-width:38px;font-size:15px}
+.editor-visual-canvas.article-body{min-height:420px;margin:0;padding:18px 20px;border:1px solid #e5e7ee;border-radius:10px;background:#fff;color:#353a43;font-size:14px;line-height:1.8;white-space:normal;overflow-wrap:anywhere;outline:0}
+.editor-visual-canvas.article-body:focus{border-color:#938de2;box-shadow:0 0 0 3px #7068d21a}
+.editor-visual-canvas.article-body:empty:before{content:attr(data-placeholder);color:#969baa;pointer-events:none}
+.editor-visual-canvas.article-body>:first-child{margin-top:0}
+.editor-visual-canvas.article-body h2{margin:25px 0 10px;padding-bottom:5px;border-bottom:1px solid #eeefed;font-size:21px}
+.editor-visual-canvas.article-body h3{margin:20px 0 8px;font-size:17px}
+.editor-wiki-link,.editor-external-link{color:#3e6f9e;text-decoration:underline;text-decoration-color:#ced8e2;text-underline-offset:2px;cursor:text}
+.editor-toc-placeholder{display:grid;gap:4px;width:min(100%,520px);margin:12px 0;padding:12px 14px;border:1px dashed #c8c9d4;border-radius:9px;background:#f8f8fc;color:#596071;user-select:none}
+.editor-toc-placeholder strong{font-size:12px}
+.editor-toc-placeholder span{color:#858b9a;font-size:11px}
+.editor-visual-canvas .wiki-table-wrap{max-width:100%;overflow-x:auto}
+.editor-visual-canvas .wiki-table td{min-width:72px}
+body.dark .field-label{color:#d9dbe5}
+body.dark .editor-toolbar-rich select{border-color:#3c3e52;background:#2a2c3c;color:#e0e2eb}
+body.dark .editor-visual-canvas.article-body{border-color:#393c50;background:#222435;color:#d8dae4}
+body.dark .editor-visual-canvas.article-body h2{border-color:#393c50;color:#eceefa}
+body.dark .editor-wiki-link,body.dark .editor-external-link{color:#b8c9ed}
+body.dark .editor-toc-placeholder{border-color:#53566c;background:#292b3b;color:#e0e2eb}
+body.dark .editor-toc-placeholder span{color:#a5aabb}
+@media(max-width:700px){.editor-visual-canvas.article-body{min-height:340px;padding:14px}.editor-toolbar-rich select{min-width:92px}.editor-toolbar-rich{gap:5px}}
