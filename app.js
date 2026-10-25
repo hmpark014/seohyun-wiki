@@ -1842,31 +1842,33 @@ function renderEditor(){
     <div class="field"><label for="docTitle">문서 제목</label><input id="docTitle" name="title" required maxlength="80" placeholder="예: 동아리, 급식, 학교 행사" value="${esc(draft.title)}"></div>
     <div class="field"><label for="docCategory">분류</label><select id="docCategory" name="category">${WIKI_CATEGORIES.map(category=>`<option value="${esc(category)}" ${draft.category===category?"selected":""}>${esc(category)}</option>`).join("")}</select></div>
     <div class="field"><label for="docBody">본문</label>
-      <div class="editor-toolbar editor-toolbar-rich" role="toolbar" aria-label="빠른 문서 서식">
+      <div class="editor-toolbar editor-toolbar-rich" role="toolbar" aria-label="문서 작성 도구">
+        <span class="editor-toolbar-label">자주 쓰는 도구</span>
         <button type="button" data-action="editor-format" data-before="'''" data-after="'''" data-placeholder="굵게">굵게</button>
-        <button type="button" data-action="editor-format" data-before="__" data-after="__" data-placeholder="밑줄">밑줄</button>
-        <button type="button" data-action="editor-format" data-before="~~" data-after="~~" data-placeholder="취소선">취소선</button>
-        <span class="editor-toolbar-separator" aria-hidden="true"></span>
-        <button type="button" data-action="insert-markup" data-markup="= 제목 =\n\n" data-select-markup="제목">제목</button>
+        <button type="button" data-action="insert-markup" data-markup="= 큰 제목 =\n\n" data-select-markup="큰 제목">제목</button>
         <button type="button" data-action="insert-markup" data-markup="== 소제목 ==\n\n" data-select-markup="소제목">소제목</button>
         <button type="button" data-action="insert-markup" data-markup=" * 항목\n * 다음 항목\n" data-select-markup="항목">목록</button>
-        <button type="button" data-action="insert-markup" data-markup=" 1. 항목\n 1. 다음 항목\n" data-select-markup="항목">번호</button>
-        <button type="button" data-action="insert-markup" data-markup=" > 인용문\n" data-select-markup="인용문">인용</button>
-        <button type="button" data-action="insert-markup" data-markup="[[문서명|표시할 글자]]" data-select-markup="표시할 글자">문서 링크</button>
-        <button type="button" data-action="insert-markup" data-markup="[[https://주소|표시할 글자]]" data-select-markup="표시할 글자">웹 링크</button>
-        <button type="button" data-action="insert-markup" data-markup="|| 제목 || 설명 ||\n|| 내용 || 내용 ||\n" data-select-markup="제목">표</button>
         <button type="button" data-action="insert-markup" data-markup="[tableofcontents]\n">목차</button>
-        <button type="button" data-action="insert-markup" data-markup="[* 각주 내용]" data-select-markup="각주 내용">각주</button>
-        <button type="button" data-action="upload-editor-image" ${state.editorImageUploadBusy?"disabled":""}>갤러리에서 사진 선택</button>
-        <button type="button" data-action="insert-markup" data-markup="https://youtu.be/영상ID\n" data-select-markup="https://youtu.be/영상ID">동영상 링크</button>
+        <button type="button" data-action="upload-editor-image" ${state.editorImageUploadBusy?"disabled":""}>사진 추가</button>
+        <button type="button" data-action="insert-markup" data-markup="https://youtu.be/영상ID\n" data-select-markup="https://youtu.be/영상ID">영상 링크</button>
+        <details class="editor-extra-tools"><summary>더 보기</summary><div class="editor-extra-tools-menu" role="group" aria-label="추가 작성 도구">
+          <button type="button" data-action="editor-format" data-before="__" data-after="__" data-placeholder="밑줄">밑줄</button>
+          <button type="button" data-action="editor-format" data-before="~~" data-after="~~" data-placeholder="취소선">취소선</button>
+          <button type="button" data-action="insert-markup" data-markup=" 1. 항목\n 1. 다음 항목\n" data-select-markup="항목">번호 목록</button>
+          <button type="button" data-action="insert-markup" data-markup=" > 인용문\n" data-select-markup="인용문">인용</button>
+          <button type="button" data-action="insert-markup" data-markup="[[문서명|표시할 글자]]" data-select-markup="표시할 글자">문서 링크</button>
+          <button type="button" data-action="insert-markup" data-markup="[[https://주소|표시할 글자]]" data-select-markup="표시할 글자">웹 링크</button>
+          <button type="button" data-action="insert-markup" data-markup="|| 제목 || 내용 ||\n|| 내용 || 내용 ||\n" data-select-markup="제목">표</button>
+          <button type="button" data-action="insert-markup" data-markup="[* 각주 내용]" data-select-markup="각주 내용">각주</button>
+        </div></details>
       </div>
       <input id="editorImageFile" type="file" accept="image/*" aria-label="업로드할 사진 파일 선택" hidden>
       <span id="editorImageUploadStatus" class="editor-image-upload-status" role="status" aria-live="polite">${state.editorImageUploadBusy?"사진을 저장소에 올리고 있어요…":""}</span>
-      <details class="editor-markup-help"><summary>다른 문법 찾아보기</summary><div class="editor-markup-content">${grammar}</div></details>
+      <details class="editor-markup-help"><summary>고급 문법 안내 (필요할 때만)</summary><div class="editor-markup-content">${grammar}</div></details>
       <div class="editor-pane-tabs" role="tablist" aria-label="본문 보기 방식"><button type="button" data-action="editor-pane" data-pane="write" aria-pressed="true">작성</button><button type="button" data-action="editor-pane" data-pane="preview" aria-pressed="false">미리보기</button><span>미리보기에서 저장 전 결과를 확인할 수 있어요.</span></div>
-      <div id="editorWritePane" class="editor-source-pane"><textarea id="docBody" name="body" required placeholder="= 문서 제목 =\n[tableofcontents]\n\n= 소개 =\n\n확인된 내용을 편하게 적어 주세요. 서식 버튼으로 제목과 글자 모양을 넣을 수 있어요.">${esc(draft.body)}</textarea></div>
+      <div id="editorWritePane" class="editor-source-pane"><textarea id="docBody" name="body" required placeholder="문서 내용을 여기에 적어 주세요. 위 작성 도구로 제목, 목차, 사진 등을 넣을 수 있어요.">${esc(draft.body)}</textarea></div>
       <div id="editorPreviewPane" class="editor-preview-pane" hidden><div class="editor-preview-note">저장 전 미리보기 · 링크는 문서에 저장한 뒤 사용할 수 있어요.</div><div id="editorPreview" class="article-body">${editorPreviewHtml(draft.body)}</div></div>
-      <span class="field-hint">사진은 ‘갤러리에서 사진 선택’으로 올려요. YouTube·Vimeo 주소나 공개된 MP4·WebM·OGV 영상 파일 주소를 한 줄에 붙여 넣으면 재생 화면으로 표시돼요. 업로드한 사진은 문서와 함께 공개되니 학생 얼굴이나 개인 정보는 올리지 마세요.</span>
+      <span class="field-hint">사진은 ‘사진 추가’ 버튼으로 올려요. YouTube·Vimeo 주소나 공개된 MP4·WebM·OGV 영상 파일 주소를 한 줄에 붙여 넣으면 재생 화면으로 표시돼요. 업로드한 사진은 문서와 함께 공개되니 학생 얼굴이나 개인 정보는 올리지 마세요.</span>
     </div>
     <div class="limits-row"><span class="limit-chip">글자 <strong>${chars.toLocaleString()} / ${state.config.chars.toLocaleString()}</strong></span><span class="limit-chip">사진 <strong>${imageCount} / ${state.config.images}</strong></span><span class="limit-chip">동영상 <strong>${videoCount} / ${state.config.videos}</strong></span><span class="limit-count ${over?"over":near?"near":""}">${over?"관리자 승인 필요":near?"제한에 가까워요":"저장 공간 절약 모드"}</span></div><div class="editor-actions"><span class="editor-actions-left">문서는 저장 후 검색과 AI 답변에 반영됩니다.</span><div class="editor-actions-right"><button type="submit" class="button button-primary" ${state.editorImageUploadBusy?"disabled":""}>${editorSubmitLabel(current,over)}</button></div></div></form></div>`;
 }

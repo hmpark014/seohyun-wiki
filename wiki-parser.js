@@ -673,11 +673,11 @@
       const search = (example + " " + description).toLocaleLowerCase("ko");
       return '<article class="editor-syntax-card" data-syntax-search="' + escapeHtml(search) + '"><div class="editor-syntax-copy"><code>' + escapeHtml(example) + '</code><small>' + escapeHtml(description) + '</small></div><button type="button" data-action="insert-markup" data-markup="' + escapeHtml(markup) + '"' + (selection ? ' data-select-markup="' + escapeHtml(selection) + '"' : "") + '>넣기</button></article>';
     }).join("");
-    return '<p class="editor-guide-intro">먼저 편집기 위의 서식 버튼을 써 보세요. 다른 문법은 예시 옆 <strong>넣기</strong>를 눌러 본문에 추가할 수 있어요.</p>' +
-      '<label class="editor-guide-search">문법 찾기<input id="syntaxHelpSearch" type="search" placeholder="예: 표, 링크, 글자색" autocomplete="off"></label>' +
-      groups.map((group, index) => '<details class="editor-guide-group"' + (index === 0 ? " open" : "") + '><summary>' + escapeHtml(group.title) + '</summary><div class="editor-syntax-list">' + rows(group.items) + '</div></details>').join("") +
+    return '<p class="editor-guide-intro">기본 작성은 위 도구만으로 할 수 있어요. 아래 문법은 직접 입력하거나 더 세밀하게 꾸미고 싶을 때 참고하세요.</p>' +
+      '<label class="editor-guide-search">고급 문법 검색<input id="syntaxHelpSearch" type="search" placeholder="예: 목차, 표, 글자색" autocomplete="off"></label>' +
+      groups.map(group => '<details class="editor-guide-group"><summary>' + escapeHtml(group.title) + '</summary><div class="editor-syntax-list">' + rows(group.items) + '</div></details>').join("") +
       '<p class="editor-guide-empty" id="editorGuideEmpty" hidden>검색한 문법이 없어요. 다른 단어로 찾아보세요.</p>' +
-      '<p class="editor-markup-note">사진은 편집기의 사진 업로드 버튼으로 넣고, 동영상은 재생 가능한 HTTPS 링크를 한 줄에 붙여 넣으세요. 일부 영상은 원본 사이트의 퍼가기 설정에 따라 재생되지 않을 수 있어요. 개인정보가 보이는 사진은 올리지 마세요. 임의 HTML·CSS·스크립트 실행이나 지원하지 않는 사이트 전용 문법은 사용할 수 없습니다.</p>';
+      '<p class="editor-markup-note">사진은 편집기의 사진 추가 버튼으로 넣고, 동영상은 재생 가능한 HTTPS 링크를 한 줄에 붙여 넣으세요. 일부 영상은 원본 사이트의 퍼가기 설정에 따라 재생되지 않을 수 있어요. 개인정보가 보이는 사진은 올리지 마세요. 임의 HTML·CSS·스크립트 실행이나 지원하지 않는 사이트 전용 문법은 사용할 수 없습니다.</p>';
   }
   window.WikiParser = { markdownHtml, inlineMarkdown: (line, context = {}) => renderInline(line, context.notes ? context : makeContext(line, context.headings || [], context)), documentHeadings, findSectionHeading, renderTocMarkup, countImages, countVideos, editorGuideHtml, migrateBody };
 })();

@@ -529,16 +529,24 @@ body.dark .article-body .wiki-colored-text{color:var(--wiki-color-dark,var(--wik
 
 /* Easier writing: quick formatting, searchable examples, and a rendered preview. */
 .editor-toolbar-rich{display:flex;align-items:center;gap:6px;margin:0 0 10px;padding:9px;border:1px solid #e8e9ef;border-radius:10px;background:#fafafe}
+.editor-toolbar-label{margin:0 3px 0 2px;color:#8a90a0;font-size:10px;font-weight:700;white-space:nowrap}
 .editor-toolbar-rich button{min-height:31px;padding:0 10px;border:1px solid #e4e5ee;border-radius:7px;background:#fff;color:#596071;font-size:11px;font-weight:600;white-space:nowrap;cursor:pointer}
 .editor-toolbar-rich button:hover,.editor-toolbar-rich button:focus-visible{border-color:#c7c3f1;background:#f6f5ff;color:#5149bd;outline:none}
 .editor-toolbar-separator{width:1px;height:22px;margin:0 2px;background:#dfe1e9}
+.editor-extra-tools{position:relative;flex:none}
+.editor-extra-tools>summary{display:flex;align-items:center;justify-content:center;min-height:31px;padding:0 10px;border:1px solid #e4e5ee;border-radius:7px;background:#fff;color:#596071;font-size:11px;font-weight:600;cursor:pointer;list-style:none;white-space:nowrap}
+.editor-extra-tools>summary::-webkit-details-marker{display:none}
+.editor-extra-tools>summary:after{content:"⌄";margin-left:6px;color:#858b9a}
+.editor-extra-tools[open]>summary{border-color:#c7c3f1;background:#f6f5ff;color:#5149bd}
+.editor-extra-tools-menu{position:absolute;top:calc(100% + 6px);right:0;z-index:20;display:grid;grid-template-columns:repeat(2,minmax(92px,1fr));gap:5px;width:min(245px,calc(100vw - 56px));padding:8px;border:1px solid #e5e6ef;border-radius:10px;background:#fff;box-shadow:0 12px 30px #20263b1a}
+.editor-extra-tools-menu button{min-width:0;text-align:center;white-space:normal}
 .editor-image-upload-status{display:block;min-height:0;margin:-3px 0 8px;color:#707789;font-size:10px;line-height:1.5}
 .editor-image-upload-status:empty{display:none}
 .editor-pane-tabs{display:flex;align-items:center;gap:5px;margin:10px 0 8px}
 .editor-pane-tabs button{min-height:30px;padding:0 12px;border:1px solid #e4e6ee;border-radius:7px;background:transparent;color:#767c8c;font-size:10px;cursor:pointer}
 .editor-pane-tabs button[aria-pressed="true"]{border-color:#d9d6f6;background:#f3f2ff;color:#5149bd;font-weight:700}
 .editor-pane-tabs span{margin-left:auto;color:#9297a5;font-size:10px}
-.editor-source-pane textarea{min-height:420px;font:13px/1.8 ui-monospace,SFMono-Regular,Menlo,monospace;tab-size:2}
+.editor-source-pane textarea{min-height:420px;font-family:inherit;font-size:14px;line-height:1.8;tab-size:2}
 .editor-preview-pane{min-height:420px;padding:17px 20px;border:1px solid #e5e7ee;border-radius:10px;background:#fff}
 .editor-preview-note{margin:-17px -20px 16px;padding:9px 13px;border-bottom:1px solid #e7e9ef;border-radius:10px 10px 0 0;background:#f8f9fc;color:#828899;font-size:10px}
 .editor-preview-pane .article-body{min-height:350px;color:#353a43}
@@ -565,9 +573,13 @@ body.dark .article-body .wiki-colored-text{color:var(--wiki-color-dark,var(--wik
 .editor-markup-note a{color:#5149bd;text-decoration:underline;text-underline-offset:2px}
 .wiki-preview-link{color:#7670c8;text-decoration:underline;text-decoration-style:dotted;text-underline-offset:2px}
 body.dark .editor-toolbar-rich{border-color:#393c50;background:#252738}
+body.dark .editor-toolbar-label{color:#a5aabb}
 body.dark .editor-toolbar-rich button{border-color:#3c3e52;background:#2a2c3c;color:#c6c9d6}
 body.dark .editor-toolbar-rich button:hover,body.dark .editor-toolbar-rich button:focus-visible{border-color:#635da6;background:#34324b;color:#dddaff}
 body.dark .editor-toolbar-separator{background:#484a5d}
+body.dark .editor-extra-tools>summary{border-color:#3c3e52;background:#2a2c3c;color:#c6c9d6}
+body.dark .editor-extra-tools[open]>summary{border-color:#635da6;background:#34324b;color:#dddaff}
+body.dark .editor-extra-tools-menu{border-color:#393c50;background:#222435;box-shadow:0 12px 30px #0005}
 body.dark .editor-image-upload-status{color:#b8bdcc}
 body.dark .editor-pane-tabs button{border-color:#3b3e52;color:#b4b9c9}
 body.dark .editor-pane-tabs button[aria-pressed="true"]{border-color:#514b8b;background:#302e4d;color:#d4d1ff}
