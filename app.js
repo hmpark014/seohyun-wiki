@@ -114,15 +114,15 @@ async function setupFirebase() {
   if (!isFirebaseConfigured) { state.firebaseReady=true; return; }
   try {
     const [appSdk, authSdk, dbSdk, appCheckSdk] = await Promise.all([
-      import("https://www.gstatic.com/firebasejs/12.5.0/firebase-app.js"),
-      import("https://www.gstatic.com/firebasejs/12.5.0/firebase-auth.js"),
-      import("https://www.gstatic.com/firebasejs/12.5.0/firebase-firestore.js"),
-      import("https://www.gstatic.com/firebasejs/12.5.0/firebase-app-check.js")
+      import("https://www.gstatic.com/firebasejs/12.19.0/firebase-app.js"),
+      import("https://www.gstatic.com/firebasejs/12.19.0/firebase-auth.js"),
+      import("https://www.gstatic.com/firebasejs/12.19.0/firebase-firestore.js"),
+      import("https://www.gstatic.com/firebasejs/12.19.0/firebase-app-check.js")
     ]);
     const app=appSdk.initializeApp(firebaseConfig);
     let storageSdk=null, storage=null;
     try{
-      storageSdk=await import("https://www.gstatic.com/firebasejs/12.5.0/firebase-storage.js");
+      storageSdk=await import("https://www.gstatic.com/firebasejs/12.19.0/firebase-storage.js");
       storage=storageSdk.getStorage(app);
     }catch(storageError){
       console.warn("Firebase Storage 초기화 실패:",storageError);
@@ -155,7 +155,7 @@ async function setupFirebase() {
       const appCheckToken=await appCheckTokenPromise;
       if(appCheckToken?.token){
       try{
-        const aiSdk=await import("https://www.gstatic.com/firebasejs/12.5.0/firebase-ai.js");
+        const aiSdk=await import("https://www.gstatic.com/firebasejs/12.19.0/firebase-ai.js");
         const ai=aiSdk.getAI(app,{backend:new aiSdk.GoogleAIBackend()});
         state.gemini=aiSdk.getGenerativeModel(ai,{model:"gemini-3.8-flash"});
         state.aiSetupIssue=null;
@@ -972,11 +972,28 @@ async function askAI(question) {
   return {text:`관련 문서에서 확인한 내용이에요.\n\n${excerpts}\n\n답변은 현재 저장된 문서의 내용만 바탕으로 구성했습니다. 더 자세한 내용은 아래 문서를 확인해 주세요.`,sources:matches.map(d=>d.id)};
 }
 function getAIErrorMessage(error){
-  const details=`${error?.code||""} ${error?.message||error||""}`;
+  const custom=error?.customErrorData||{};
+  const rawMessage=String(error?.message||error||"");
+  const httpMatch=rawMessage.match(/\[(\d{3})\s+([^\]]+)\]\s*([\s\S]*)/);
+  const status=Number(custom.status||httpMatch?.[1])||null;
+  const statusText=String(custom.statusText||httpMatch?.[2]||"").trim();
+  const errorReasons=Array.isArray(custom.errorDetails)?[...new Set(custom.errorDetails.map(item=>item?.reason).filter(Boolean))]:[];
+  const responseMessage=(httpMatch?.[3]||rawMessage)
+    .replace(/\s*\(fire\/ai\/[^)]+\)\s*$/i,"")
+    .replace(/https?:\/\/[^\s]+/g,"[요청 주소]")
+    .replace(/\s+/g," ").trim().slice(0,260);
+  const details=`${error?.code||""} ${rawMessage} ${errorReasons.join(" ")}`;
   if(/app.?check|recaptcha|attestation|enforce firebase app check/i.test(details))return state.isAdmin?"AI 보안 확인(App Check)에 실패했어요. Firebase 콘솔에서 웹 앱을 reCAPTCHA Enterprise로 등록하고, 현재 배포 도메인을 허용한 뒤 사이트 키를 firebase-config.js에 설정해 주세요.":"AI 보안 확인에 실패했어요. 잠시 후 다시 시도하거나 관리자에게 알려 주세요.";
   if(/429|resource_exhausted|quota|rate.?limit/i.test(details))return "AI 요청 한도에 도달했어요. 잠시 기다린 뒤 다시 시도해 주세요.";
+  if(/API_KEY_SERVICE_BLOCKED|API_KEY_HTTP_REFERRER_BLOCKED|requests to this api .*blocked|api key.*restriction/i.test(details))return state.isAdmin?`Firebase API 키 제한이 요청을 막았어요${status?` (HTTP ${status})`:""}. Google Cloud 콘솔에서 이 키의 API 제한에 Firebase AI Logic API(firebasevertexai.googleapis.com)가 허용되어 있는지, 웹사이트 제한에 seohyun-wiki.pages.dev이 포함되어 있는지 확인해 주세요.`:"AI 연결 설정이 요청을 차단하고 있어요. 관리자에게 알려 주세요.";
   if(/api key not valid|api_key_invalid|invalid api key/i.test(details))return state.isAdmin?"Firebase 웹 앱 설정의 API 키가 올바르지 않아요. Firebase 콘솔에 등록된 이 앱의 설정값과 firebase-config.js를 확인해 주세요.":"AI 연결 설정을 확인할 수 없어요. 관리자에게 알려 주세요.";
-  if(/403|permission_denied|ai logic has been deactivated|not enabled|not found/i.test(details))return state.isAdmin?"Firebase AI Logic 요청이 거부됐어요. Firebase 콘솔에서 AI Logic의 Gemini Developer API 설정, App Check 등록·허용 도메인, 사용량 한도를 확인해 주세요.":"AI 답변 서비스에 연결할 수 없어요. 잠시 후 다시 시도해 주세요.";
+  if(error?.code==="api-not-enabled"||/firebase ai logic has been deactivated|service_disabled|not enabled/i.test(details))return state.isAdmin?"Firebase AI Logic API가 사용 설정되지 않았거나 비활성화됐어요. Firebase 콘솔의 AI Logic 설정과 App Check 적용 상태를 확인해 주세요.":"AI 답변 서비스를 준비 중이에요. 잠시 후 다시 시도해 주세요.";
+  if(status===404||/model .*not found|model .*not supported/i.test(details))return state.isAdmin?`요청한 AI 모델을 찾지 못했어요${status?` (HTTP ${status})`:""}. firebase-ai.js의 모델 이름과 현재 프로젝트에서 사용할 수 있는 모델을 확인해 주세요.${errorReasons.length?` 원인: ${errorReasons.join(", ")}.`:""}`:"AI 모델을 찾을 수 없어 답변을 만들지 못했어요. 관리자에게 알려 주세요.";
+  if(/403|permission_denied|ai logic has been deactivated|not enabled|not found/i.test(details))return state.isAdmin?`Firebase AI Logic 요청이 거부됐어요${status?` (HTTP ${status}${statusText?` ${statusText}`:""})`:""}${errorReasons.length?` · 원인: ${errorReasons.join(", ")}`:""}.${responseMessage?` ${responseMessage}`:""} Firebase AI Logic의 Gemini Developer API 설정, App Check, API 키 제한을 확인해 주세요.`:"AI 답변 서비스에 연결할 수 없어요. 잠시 후 다시 시도해 주세요.";
+  if(error?.code==="fetch-error"&&state.isAdmin){
+    if(status)return `Firebase AI 서버가 요청을 거부했어요 (HTTP ${status}${statusText?` ${statusText}`:""})${errorReasons.length?` · 원인: ${errorReasons.join(", ")}`:""}.${responseMessage?` ${responseMessage}`:""} Firebase AI Logic의 모델·App Check·API 키 제한 설정을 확인해 주세요.`;
+    return "Firebase AI 서버에 연결하지 못했어요. 브라우저의 광고·추적 차단 기능이나 학교 네트워크가 firebasevertexai.googleapis.com 요청을 막는지 확인해 주세요.";
+  }
   return state.isAdmin?`AI 답변에 연결하지 못했어요. Firebase AI Logic과 App Check 설정을 확인해 주세요${error?.code?` (오류 코드: ${error.code})`:""}.`:"AI 답변에 연결하지 못했어요. 잠시 후 다시 시도해 주세요.";
 }
 function getAdminAccess() { return state.isAdmin||state.demoAdmin; }

@@ -24,7 +24,7 @@ python3 -m http.server 8000
 firebase deploy --only hosting,firestore:rules,storage
 ```
 
-현재 앱은 Firebase JS SDK 12.5.0의 Auth, Firestore, Storage, AI Logic 모듈과 `gemini-3.8-flash` 모델을 사용합니다. Firebase AI Logic은 프런트엔드에서 Gemini를 부르는 용도로 사용하므로 별도의 Gemini API 키를 브라우저 코드에 넣지 않습니다. Firebase AI Logic 서비스 이용은 무료지만 Gemini Developer API 사용량은 별도 쿼터·요금 정책을 따르므로, 배포 전에 [Firebase AI Logic 요금 안내](https://firebase.google.com/docs/ai-logic/pricing)와 프로젝트의 현재 한도를 확인하세요.
+현재 앱은 Firebase JS SDK 12.19.0의 Auth, Firestore, Storage, AI Logic 모듈과 `gemini-3.8-flash` 모델을 사용합니다. Firebase AI Logic은 프런트엔드에서 Gemini를 부르는 용도로 사용하므로 별도의 Gemini API 키를 브라우저 코드에 넣지 않습니다. Firebase AI Logic 서비스 이용은 무료지만 Gemini Developer API 사용량은 별도 쿼터·요금 정책을 따르므로, 배포 전에 [Firebase AI Logic 요금 안내](https://firebase.google.com/docs/ai-logic/pricing)와 프로젝트의 현재 한도를 확인하세요.
 
 ### 권한과 문서 제한
 
