@@ -555,7 +555,7 @@ function renderHome() {
     <div class="home-widgets">
       <section class="widget-card" aria-labelledby="homeRecommendTitle">
         <div class="widget-header"><div class="widget-heading">${widgetIcon(icons.recommend,"widget-icon-recommend")}<div class="widget-heading-copy"><h2 class="widget-title" id="homeRecommendTitle">추천 문서</h2></div></div><button class="widget-more" type="button" data-action="open-recommendations" aria-label="추천 문서 전체 보기">전체 보기 ${icons.arrow}</button></div>
-        ${featured?`<button class="featured-document" type="button" data-action="open-doc" data-id="${esc(featured.id)}"><span class="featured-document-head"><span class="featured-tag">${esc(featured.category||"추천 문서")}</span><span class="featured-slot">이번 추천</span></span><strong class="featured-title">${esc(featured.title)}</strong><span class="featured-summary">${esc(featured.summary||featured.body.replace(/^#+\s*/gm,"").replace(/\s+/g," ").trim().slice(0,140))}</span><span class="featured-document-foot"><span>조회 ${(featured.views||0).toLocaleString("ko-KR")} · 최근 수정 ${nowLabel(featured.updatedAt||Date.now())}</span><span class="featured-read">문서 읽기 ${icons.arrow}</span></span></button>`:`<div class="widget-empty"><strong>아직 추천할 문서가 없어요.</strong><span>문서가 등록되면 여기에 보여드릴게요.</span></div>`}
+        ${featured?`<button class="featured-document" type="button" data-action="open-doc" data-id="${esc(featured.id)}"><span class="featured-document-head"><span class="featured-tag">${esc(featured.category||"추천 문서")}</span><span class="featured-slot">이번 추천</span></span><strong class="featured-title">${esc(featured.title)}</strong><span class="featured-summary">${esc(documentPreviewText(featured,140))}</span><span class="featured-document-foot"><span>조회 ${(featured.views||0).toLocaleString("ko-KR")} · 최근 수정 ${nowLabel(featured.updatedAt||Date.now())}</span><span class="featured-read">문서 읽기 ${icons.arrow}</span></span></button>`:`<div class="widget-empty"><strong>아직 추천할 문서가 없어요.</strong><span>문서가 등록되면 여기에 보여드릴게요.</span></div>`}
       </section>
       <section class="widget-card" aria-labelledby="homeTrendsTitle">
         <div class="widget-header"><div class="widget-heading">${widgetIcon(icons.clock)}<div class="widget-heading-copy"><h2 class="widget-title" id="homeTrendsTitle">실시간 검색어 랭킹</h2></div></div><button class="widget-more" type="button" data-action="open-trends" aria-label="실시간 검색어 전체 순위 보기">전체 순위 ${icons.arrow}</button></div>
@@ -731,7 +731,7 @@ function renderSearch() {
   const query=String(state.query||"").trim();
   const results=liveDocs().filter(doc=>!doc.sample).map(doc=>({doc,score:scoreSearchDocument(doc,query)})).filter(item=>item.score>0).sort((a,b)=>b.score-a.score||(b.doc.views||0)-(a.doc.views||0)||String(a.doc.title).localeCompare(String(b.doc.title),"ko"));
   const list=results.map(({doc})=>{
-    const excerpt=String(doc.summary||doc.body||"").replace(/^\[[^\]]+\]\s*/gm,"").replace(/^#(?:제목|소제목|강조|목록|인용|문서|링크|사진|영상|선|목차)#?\s*/gm,"").replace(/^#+\s*/gm,"").replace(/[\*_`]/g,"").replace(/\s+/g," ").trim().slice(0,220);
+    const excerpt=documentPreviewText(doc,220);
     return `<button type="button" class="result-item" data-action="open-doc" data-search-result-doc="true" data-id="${esc(doc.id)}"><div class="result-title">${esc(doc.title)}</div><div class="result-excerpt">${esc(excerpt)}</div><div class="result-tags"><span class="tag">${esc(doc.category||"문서")}</span><span class="tag">최근 수정 ${nowLabel(doc.updatedAt||Date.now())}</span></div></button>`;
   }).join("");
   return `<div class="content-page"><div class="page-title-row"><div><p class="eyebrow">Search</p><h1 class="page-title">검색 결과</h1><p class="page-subtitle">‘${esc(query)}’ 관련 문서 ${results.length}개를 찾았어요.</p></div></div><section class="panel search-results-panel"><div class="search-summary"><strong>${results.length}</strong>개의 관련 문서</div>${results.length?`<div class="result-list">${list}</div>`:`<div class="empty-state"><div class="empty-mark">${icons.search}</div><p class="empty-title">관련 문서를 찾지 못했어요</p><p class="empty-copy">다른 키워드로 다시 검색하거나, 띄어쓰기를 바꿔 보세요.</p><button class="button button-secondary" type="button" data-view="home">홈으로 돌아가기</button></div>`}</section></div>`;
@@ -766,7 +766,19 @@ function countVideos(text) {
 }
 function renderRecommendations() {
   const docs=liveDocs().filter(doc=>!doc.sample).slice().sort((a,b)=>recommendScore(b)-recommendScore(a));
-  return `<div class="content-page"><div class="page-title-row"><div><p class="eyebrow">Explore the wiki</p><h1 class="page-title">추천 문서</h1><p class="page-subtitle">직접 작성된 문서 중 많이 읽히고 최근에 업데이트된 문서를 모았어요.</p></div>${state.user?`<button class="button button-primary" data-action="new-doc">${icons.plus}문서 만들기</button>`:""}</div>${docs.length?`<div class="recommend-grid">${docs.map(d=>`<button class="panel recommend-card" data-action="open-doc" data-id="${esc(d.id)}"><span class="recommend-tag">${esc(d.category||"추천 문서")}</span><strong class="recommend-title">${esc(d.title)}</strong><span class="recommend-description">${esc(d.summary||d.body.slice(0,95))}</span><span class="recommend-bottom"><span>최근 수정 ${nowLabel(d.updatedAt||Date.now())}</span><span>조회 ${d.views||0}</span></span></button>`).join("")}</div>`:`<section class="panel empty-state"><p class="empty-title">아직 추천 문서가 없어요</p></section>`}</div>`;
+  return `<div class="content-page"><div class="page-title-row"><div><p class="eyebrow">Explore the wiki</p><h1 class="page-title">추천 문서</h1><p class="page-subtitle">직접 작성된 문서 중 많이 읽히고 최근에 업데이트된 문서를 모았어요.</p></div>${state.user?`<button class="button button-primary" data-action="new-doc">${icons.plus}문서 만들기</button>`:""}</div>${docs.length?`<div class="recommend-grid">${docs.map(d=>`<button class="panel recommend-card" data-action="open-doc" data-id="${esc(d.id)}"><span class="recommend-tag">${esc(d.category||"추천 문서")}</span><strong class="recommend-title">${esc(d.title)}</strong><span class="recommend-description">${esc(documentPreviewText(d,125))}</span><span class="recommend-bottom"><span>최근 수정 ${nowLabel(d.updatedAt||Date.now())}</span><span>조회 ${d.views||0}</span></span></button>`).join("")}</div>`:`<section class="panel empty-state"><p class="empty-title">아직 추천 문서가 없어요</p></section>`}</div>`;
+}
+function documentPreviewText(doc,maxLength=140){
+  const summary=String(doc?.summary||"").trim();
+  const summaryHasWikiSyntax=/'''|__|~~|--|\^\^|,,|\{\{\{|\[\[[^\]]+\]\]|^\s*(?:\[(?:목차|tableofcontents|ruby|age|dday|각주|footnote)(?:\([^\]]*\))?\]|={1,6}\s+.*?\s+={1,6}|#(?:제목|소제목|강조|목록|인용|문서|링크|사진|영상|선)#?|\|\|)/im.test(summary);
+  const source=String(summaryHasWikiSyntax?doc?.body||summary:summary||doc?.body||"").trim();
+  if(!source)return "";
+  const withoutToc=WikiParser.migrateBody(source).replace(/^\s*(?:\[(?:목차|tableofcontents)(?:\(\s*hide\s*\))?\]|#목차#?)\s*$/gim,"");
+  const preview=document.createElement("div");
+  preview.innerHTML=WikiParser.markdownHtml(withoutToc,null,null,{isPreview:true});
+  preview.querySelectorAll(".wiki-video,.wiki-image,iframe,video,img").forEach(element=>element.remove());
+  const text=String(preview.innerText||preview.textContent||"").replace(/\s+/g," ").trim();
+  return text.length>maxLength?`${text.slice(0,Math.max(0,maxLength-1)).trimEnd()}…`:text;
 }
 function recommendScore(doc) { const days=Math.max(0,(Date.now()-(doc.updatedAt||Date.now()))/86400000);return (doc.views||0)*.25+Math.max(0,28-days)*.4; }
 function getTrendList() {
