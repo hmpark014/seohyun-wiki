@@ -633,3 +633,4 @@ body.dark .editor-wiki-link,body.dark .editor-external-link{color:#b8c9ed}
 body.dark .editor-toc-placeholder{border-color:#53566c;background:#292b3b;color:#e0e2eb}
 body.dark .editor-toc-placeholder span{color:#a5aabb}
 @media(max-width:700px){.editor-visual-canvas.article-body{min-height:340px;padding:14px}.editor-toolbar-rich select{min-width:92px}.editor-toolbar-rich{gap:5px}}
+.shuffle-button svg{width:18px;height:18px;stroke-width:2}
