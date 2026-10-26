@@ -1562,6 +1562,7 @@ document.addEventListener("click",async event=>{
     case "open-trends":navigate("trends");break;
     case "open-settings":openSettings();break;
     case "open-doc":{const doc=getDoc(id);if(target.dataset.searchResultDoc==="true"&&doc)recordSearchSelection(doc,state.query);state.docId=id;refreshArticleViews(id);navigate("article");break;}
+    case "random-doc":{const docs=liveDocs();if(!docs.length){toast("랜덤으로 볼 공개 문서가 아직 없어요.");break;}const choices=state.view==="article"&&docs.length>1?docs.filter(doc=>doc.id!==state.docId):docs;const doc=choices[Math.floor(Math.random()*choices.length)]||docs[0];state.docId=doc.id;refreshArticleViews(doc.id);navigate("article");break;}
     case "toc-jump":document.getElementById(target.dataset.headingId)?.scrollIntoView({behavior:"smooth",block:"start"});break;
     case "new-doc":modalClose();startEdit(null,target.dataset.title||"");break;
     case "copy-doc":{if(!state.user){toast("문서를 복사하려면 먼저 로그인해 주세요.");showLoginModal();break;}const doc=getDoc(id);if(doc){state.editingDraft={title:`${doc.title} 복사본`,category:WIKI_CATEGORIES.includes(doc.category)?doc.category:"기타",body:docEditorBody(doc)};state.editorId=null;state.pendingChangeKind="copy";navigate("editor");}break;}
