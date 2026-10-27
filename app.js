@@ -72,7 +72,19 @@ const icons = {
 };
 
 function esc(value="") { return String(value).replace(/[&<>"']/g, ch => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;", "'":"&#39;"}[ch])); }
-function nowLabel(time) { const age=Date.now()-time; if(age<3600000)return "방금 전"; if(age<86400000)return `${Math.floor(age/3600000)}시간 전`; if(age<86400000*2)return "어제"; return `${Math.floor(age/86400000)}일 전`; }
+function timestampMillis(value) {
+  if(value==null)return null;
+  if(typeof value.toMillis==="function") { const millis=value.toMillis();return Number.isFinite(millis)&&millis>0?millis:null; }
+  if(value instanceof Date) { const millis=value.getTime();return Number.isFinite(millis)&&millis>0?millis:null; }
+  if(typeof value==="number"&&Number.isFinite(value)) { const millis=Math.abs(value)<100000000000?value*1000:value;return millis>0?millis:null; }
+  if(typeof value==="string") {
+    const numeric=Number(value);
+    if(Number.isFinite(numeric)&&numeric>0)return Math.abs(numeric)<100000000000?numeric*1000:numeric;
+    const parsed=Date.parse(value);return Number.isFinite(parsed)&&parsed>0?parsed:null;
+  }
+  return null;
+}
+function nowLabel(time) { const timestamp=timestampMillis(time);if(timestamp===null)return "기록 없음";const age=Date.now()-timestamp;if(age<0)return "시각 확인 필요";if(age<3600000)return "방금 전";if(age<86400000)return `${Math.floor(age/3600000)}시간 전`;if(age<86400000*2)return "어제";return `${Math.floor(age/86400000)}일 전`; }
 function todayKey() { return new Date().toLocaleDateString("sv-SE",{timeZone:"Asia/Seoul"}); }
 function publishedDocs() { return state.docs.filter(d=>!d.sample&&d.status!=="hidden"); }
 function liveDocs() { return publishedDocs().filter(d=>d.status==="published"); }
@@ -304,7 +316,7 @@ async function syncDocsFromCloud() {
     const snapshot=await getDocs(state.isAdmin?docsRef:query(docsRef,where("status","==","published")));
     const hadCloudDocs=localStorage.getItem("seohyeonwiki.cloudDocsInitialized")==="1";
     if(!snapshot.empty||hadCloudDocs) {
-      const cloud=snapshot.docs.map(item=>{const data=item.data();const doc={id:item.id,...data,updatedAt:data.updatedAt?.toMillis?.()||data.updatedAt||Date.now()};const seeded=doc.sample?LEGACY_SAMPLE_VIEW_SEEDS[doc.id]:undefined;return seeded!==undefined&&Number(doc.views)>=seeded?{...doc,views:Math.max(0,Number(doc.views)-seeded)}:doc;});
+      const cloud=snapshot.docs.map(item=>{const data=item.data();const doc={id:item.id,...data,updatedAt:timestampMillis(data.updatedAt??data.createdAt)};const seeded=doc.sample?LEGACY_SAMPLE_VIEW_SEEDS[doc.id]:undefined;return seeded!==undefined&&Number(doc.views)>=seeded?{...doc,views:Math.max(0,Number(doc.views)-seeded)}:doc;});
       state.docs=[...cloud,...state.docs.filter(d=>d.sample&&!cloud.some(c=>c.id===d.id))];
       saveLocal();
     }
@@ -329,10 +341,14 @@ async function cloudCreateEditRequest(request){
   return ref.id;
 }
 async function cloudToggleEditRestriction(doc,restricted){
-  const {doc:docRef,getDoc,updateDoc,serverTimestamp}=state.firebase.dbSdk;
+  const {doc:docRef,getDoc,updateDoc}=state.firebase.dbSdk;
   const ref=docRef(state.firebase.db,"docs",doc.id),snapshot=await getDoc(ref);
-  if(snapshot.exists())await updateDoc(ref,{editRestricted:restricted,updatedAt:serverTimestamp(),updatedBy:state.user.uid});
+  if(snapshot.exists())await updateDoc(ref,{editRestricted:restricted});
   else await cloudWriteDoc({...doc,editRestricted:restricted});
+}
+async function cloudSetDocumentVisibility(docId,status){
+  const {doc:docRef,updateDoc}=state.firebase.dbSdk;
+  await updateDoc(docRef(state.firebase.db,"docs",docId),{status});
 }
 async function cloudReviewEditRequest(request,approved){
   const {doc:docRef,updateDoc,serverTimestamp,writeBatch}=state.firebase.dbSdk;
@@ -555,7 +571,7 @@ function renderHome() {
     <div class="home-widgets">
       <section class="widget-card" aria-labelledby="homeRecommendTitle">
         <div class="widget-header"><div class="widget-heading">${widgetIcon(icons.recommend,"widget-icon-recommend")}<div class="widget-heading-copy"><h2 class="widget-title" id="homeRecommendTitle">추천 문서</h2></div></div><button class="widget-more" type="button" data-action="open-recommendations" aria-label="추천 문서 전체 보기">전체 보기 ${icons.arrow}</button></div>
-        ${featured?`<button class="featured-document" type="button" data-action="open-doc" data-id="${esc(featured.id)}"><span class="featured-document-head"><span class="featured-tag">${esc(featured.category||"추천 문서")}</span><span class="featured-slot">이번 추천</span></span><strong class="featured-title">${esc(featured.title)}</strong><span class="featured-summary">${esc(documentPreviewText(featured,140))}</span><span class="featured-document-foot"><span>조회 ${(featured.views||0).toLocaleString("ko-KR")} · 최근 수정 ${nowLabel(featured.updatedAt||Date.now())}</span><span class="featured-read">문서 읽기 ${icons.arrow}</span></span></button>`:`<div class="widget-empty"><strong>아직 추천할 문서가 없어요.</strong><span>문서가 등록되면 여기에 보여드릴게요.</span></div>`}
+        ${featured?`<button class="featured-document" type="button" data-action="open-doc" data-id="${esc(featured.id)}"><span class="featured-document-head"><span class="featured-tag">${esc(featured.category||"추천 문서")}</span><span class="featured-slot">이번 추천</span></span><strong class="featured-title">${esc(featured.title)}</strong><span class="featured-summary">${esc(documentPreviewText(featured,140))}</span><span class="featured-document-foot"><span>조회 ${(featured.views||0).toLocaleString("ko-KR")} · 최근 수정 ${nowLabel(featured.updatedAt)}</span><span class="featured-read">문서 읽기 ${icons.arrow}</span></span></button>`:`<div class="widget-empty"><strong>아직 추천할 문서가 없어요.</strong><span>문서가 등록되면 여기에 보여드릴게요.</span></div>`}
       </section>
       <section class="widget-card" aria-labelledby="homeTrendsTitle">
         <div class="widget-header"><div class="widget-heading">${widgetIcon(icons.clock)}<div class="widget-heading-copy"><h2 class="widget-title" id="homeTrendsTitle">실시간 검색어 랭킹</h2></div></div><button class="widget-more" type="button" data-action="open-trends" aria-label="실시간 검색어 전체 순위 보기">전체 순위 ${icons.arrow}</button></div>
@@ -723,16 +739,16 @@ function renderArticle() {
   const toc=documentHeadings(body);
   const tocMarkup=renderTocMarkup(toc),hasInlineToc=/^\s*\[(?:목차|tableofcontents)(?:\(\s*hide\s*\))?\]\s*$/im.test(WikiParser.migrateBody(body));
   const mediaHtml=[...(inlineMedia.images||[]).map(url=>`<a class="media-card" href="${esc(url)}" target="_blank" rel="noopener noreferrer"><img src="${esc(url)}" alt="문서 첨부 이미지" loading="lazy"></a>`),...(inlineMedia.videos||[]).map(url=>`<a class="media-link" href="${esc(url)}" target="_blank" rel="noopener noreferrer">동영상 보기 ${icons.arrow}</a>`)].join("");
-  const restrictionBadge=doc.editRestricted?'<span class="tag">편집 제안 승인 필요</span>':'<span class="tag">학교 계정 누구나 편집 가능</span>';
+  const restrictionBadge=doc.editRestricted?(state.isAdmin?'<span class="tag">편집 제한 · 관리자 직접 편집 가능</span>':'<span class="tag">편집 제안 승인 필요</span>'):'<span class="tag">학교 계정 누구나 편집 가능</span>';
   const restrictionAction=canManageEditRestrictions()?`<button class="button button-secondary" data-action="toggle-edit-restriction" data-id="${esc(doc.id)}">${doc.editRestricted?"편집 제한 해제":"편집 제한 설정"}</button>`:"";
-  return `<div class="content-page"><div class="article-layout"><article class="panel article-main"><div class="breadcrumbs"><button data-view="home">홈</button> › <button data-action="search-category" data-category="${esc(doc.category||"문서")}">${esc(doc.category||"문서")}</button></div><h1 class="article-title">${esc(doc.title)}</h1><div class="article-meta"><span>${esc(doc.author||"서현위키 이용자")}</span><span>·</span><span>최근 수정 ${nowLabel(doc.updatedAt||Date.now())}</span><span>·</span><span>조회 ${doc.views||0}</span>${doc.status==="hidden"?'<span class="tag">숨김 문서</span>':""}${doc.sample?'<span class="tag">예시 문서</span>':""}${restrictionBadge}</div>${hasInlineToc?"":tocMarkup}<div class="article-body">${markdownHtml(body,toc.map(heading=>heading.id),tocMarkup)}${mediaHtml?`<div class="article-media">${mediaHtml}</div>`:""}</div><div class="article-side-actions"><button class="button button-secondary" data-action="edit-doc" data-id="${esc(doc.id)}">${state.user?(doc.editRestricted?"편집 제안":"문서 편집"):"로그인 후 편집"}</button>${restrictionAction}<button class="button button-secondary" data-action="report-doc" data-id="${esc(doc.id)}">신고</button>${canDeleteDocuments(doc)?`<button class="button button-danger" data-action="delete-doc" data-id="${esc(doc.id)}">문서 영구 삭제</button>`:""}</div></article></div></div>`;
+  return `<div class="content-page"><div class="article-layout"><article class="panel article-main"><div class="breadcrumbs"><button data-view="home">홈</button> › <button data-action="search-category" data-category="${esc(doc.category||"문서")}">${esc(doc.category||"문서")}</button></div><h1 class="article-title">${esc(doc.title)}</h1><div class="article-meta"><span>${esc(doc.author||"서현위키 이용자")}</span><span>·</span><span>최근 수정 ${nowLabel(doc.updatedAt)}</span><span>·</span><span>조회 ${doc.views||0}</span>${doc.status==="hidden"?'<span class="tag">숨김 문서</span>':""}${doc.sample?'<span class="tag">예시 문서</span>':""}${restrictionBadge}</div>${hasInlineToc?"":tocMarkup}<div class="article-body">${markdownHtml(body,toc.map(heading=>heading.id),tocMarkup)}${mediaHtml?`<div class="article-media">${mediaHtml}</div>`:""}</div><div class="article-side-actions"><button class="button button-secondary" data-action="edit-doc" data-id="${esc(doc.id)}">${state.user?(doc.editRestricted?(state.isAdmin?"관리자 직접 편집":"편집 제안"):"문서 편집"):"로그인 후 편집"}</button>${restrictionAction}<button class="button button-secondary" data-action="report-doc" data-id="${esc(doc.id)}">신고</button>${canDeleteDocuments(doc)?`<button class="button button-danger" data-action="delete-doc" data-id="${esc(doc.id)}">문서 영구 삭제</button>`:""}</div></article></div></div>`;
 }
 function renderSearch() {
   const query=String(state.query||"").trim();
   const results=liveDocs().filter(doc=>!doc.sample).map(doc=>({doc,score:scoreSearchDocument(doc,query)})).filter(item=>item.score>0).sort((a,b)=>b.score-a.score||(b.doc.views||0)-(a.doc.views||0)||String(a.doc.title).localeCompare(String(b.doc.title),"ko"));
   const list=results.map(({doc})=>{
     const excerpt=documentPreviewText(doc,220);
-    return `<button type="button" class="result-item" data-action="open-doc" data-search-result-doc="true" data-id="${esc(doc.id)}"><div class="result-title">${esc(doc.title)}</div><div class="result-excerpt">${esc(excerpt)}</div><div class="result-tags"><span class="tag">${esc(doc.category||"문서")}</span><span class="tag">최근 수정 ${nowLabel(doc.updatedAt||Date.now())}</span></div></button>`;
+    return `<button type="button" class="result-item" data-action="open-doc" data-search-result-doc="true" data-id="${esc(doc.id)}"><div class="result-title">${esc(doc.title)}</div><div class="result-excerpt">${esc(excerpt)}</div><div class="result-tags"><span class="tag">${esc(doc.category||"문서")}</span><span class="tag">최근 수정 ${nowLabel(doc.updatedAt)}</span></div></button>`;
   }).join("");
   return `<div class="content-page"><div class="page-title-row"><div><p class="eyebrow">Search</p><h1 class="page-title">검색 결과</h1><p class="page-subtitle">‘${esc(query)}’ 관련 문서 ${results.length}개를 찾았어요.</p></div></div><section class="panel search-results-panel"><div class="search-summary"><strong>${results.length}</strong>개의 관련 문서</div>${results.length?`<div class="result-list">${list}</div>`:`<div class="empty-state"><div class="empty-mark">${icons.search}</div><p class="empty-title">관련 문서를 찾지 못했어요</p><p class="empty-copy">다른 키워드로 다시 검색하거나, 띄어쓰기를 바꿔 보세요.</p><button class="button button-secondary" type="button" data-view="home">홈으로 돌아가기</button></div>`}</section></div>`;
 }
@@ -742,10 +758,11 @@ function renderEditor() {
   const chars=draft.body.length, imageCount=countImages(draft.body), videoCount=countVideos(draft.body);
   const over=chars>state.config.chars||imageCount>state.config.images||videoCount>state.config.videos;
   const near=chars>state.config.chars*.8;
-  const approvalInfo=!current?"새 문서는 관리자 승인 후 공개됩니다.":current?.editRestricted&&!state.isAdmin?"이 문서는 편집 제안을 제출하고 권한 있는 이용자의 승인을 받아야 반영됩니다.":"일반 문서는 작성자가 아니어도 학교 계정으로 편집할 수 있고 저장 즉시 반영됩니다.";
+  const approvalInfo=!current?"새 문서는 관리자 승인 후 공개됩니다.":current?.editRestricted&&state.isAdmin?"편집 제한이 켜져 있지만 관리자 계정은 직접 수정할 수 있습니다. 일반 이용자의 수정은 편집 제안으로 접수돼 승인 후 반영됩니다.":current?.editRestricted?"이 문서는 편집 제안을 제출하고 권한 있는 이용자의 승인을 받아야 반영됩니다.":"일반 문서는 작성자가 아니어도 학교 계정으로 편집할 수 있고 저장 즉시 반영됩니다.";
   return `<div class="content-page"><div class="page-title-row"><div><p class="eyebrow">Write together</p><h1 class="page-title">${current?"문서 편집":"새 문서 만들기"}</h1><p class="page-subtitle">확인한 정보를 알기 쉽게 정리해 주세요.</p></div></div><form class="panel editor-panel" id="editorForm"><div class="admin-callout">${icons.shield}<span>${approvalInfo} 글자 <strong>${state.config.chars.toLocaleString()}자</strong>, 사진 링크 <strong>${state.config.images}개</strong>, 동영상 링크 <strong>${state.config.videos}개</strong> 제한을 넘긴 편집도 승인 후 반영됩니다.</span></div><div class="field"><label for="docTitle">문서 제목</label><input id="docTitle" name="title" required maxlength="80" placeholder="예: 동아리, 급식, 학교 행사" value="${esc(draft.title)}"></div><div class="field"><label for="docCategory">분류</label><select id="docCategory" name="category">${WIKI_CATEGORIES.map(category=>`<option value="${esc(category)}" ${draft.category===category?"selected":""}>${esc(category)}</option>`).join("")}</select></div><div class="field"><label for="docBody">본문</label><div class="editor-toolbar"><button type="button" data-action="insert-markup" data-markup="#사진# https://주소 | 사진 설명">사진 링크</button><button type="button" data-action="insert-markup" data-markup="#영상# https://www.youtube.com/watch?v=">동영상 링크</button></div><details class="editor-markup-help"><summary>작성 문법 보기</summary><div class="editor-markup-content"><p>#목차# 개요 또는 #목차#개요는 제목을 상단 목차에 추가하고, #목차#만 쓰면 해당 위치에 목차를 표시해요.</p><div class="editor-markup-grid"><span><code>#제목# 제목</code><small>큰 제목</small></span><span><code>#소제목# 제목</code><small>작은 제목</small></span><span><code>#강조# 내용</code><small>중요한 문장</small></span><span><code>#목차# 개요</code><small>제목을 목차에 추가 (공백 생략 가능)</small></span><span><code>#목차#</code><small>이 위치에 목차 표시</small></span><span><code>#인용# 문장</code><small>인용문</small></span><span><code>#문서# 문서명 | 표시</code><small>위키 문서 연결</small></span><span><code>#링크# 주소 | 설명</code><small>외부 링크</small></span><span><code>#사진# 주소 | 설명</code><small>사진 삽입</small></span><span><code>#영상# 주소</code><small>영상 링크</small></span><span><code>#선#</code><small>구분선</small></span></div></details><textarea id="docBody" name="body" required placeholder="#제목# 문서 제목\n\n#소제목# 소개\n\n확인된 내용을 작성해 주세요.">${esc(draft.body)}</textarea><span class="field-hint">미디어는 링크로 삽입하며 파일을 직접 업로드하지 않습니다. 사람을 식별할 수 있는 사진·개인 정보는 올리지 마세요.</span></div><div class="limits-row"><span class="limit-chip">글자 <strong>${chars.toLocaleString()} / ${state.config.chars.toLocaleString()}</strong></span><span class="limit-chip">사진 <strong>${imageCount} / ${state.config.images}</strong></span><span class="limit-chip">동영상 <strong>${videoCount} / ${state.config.videos}</strong></span><span class="limit-count ${over?"over":near?"near":""}">${over?"관리자 승인 필요":near?"제한에 가까워요":"저장 공간 절약 모드"}</span></div><div class="editor-actions"><span class="editor-actions-left">문서는 저장 후 검색과 AI 답변에 반영됩니다.</span><div class="editor-actions-right"><button type="submit" class="button button-primary">${editorSubmitLabel(current,over)}</button></div></div></form></div>`;
 }
 function editorSubmitLabel(current,over){
+  if(current?.editRestricted&&state.isAdmin)return "관리자 직접 저장";
   if(current?.editRestricted&&!state.isAdmin)return "편집 요청 제출";
   if(!current||over&&!getAdminAccess())return "관리자 승인 요청";
   return over?"제한 초과 확인":"문서 저장";
@@ -766,7 +783,7 @@ function countVideos(text) {
 }
 function renderRecommendations() {
   const docs=liveDocs().filter(doc=>!doc.sample).slice().sort((a,b)=>recommendScore(b)-recommendScore(a));
-  return `<div class="content-page"><div class="page-title-row"><div><p class="eyebrow">Explore the wiki</p><h1 class="page-title">추천 문서</h1><p class="page-subtitle">직접 작성된 문서 중 많이 읽히고 최근에 업데이트된 문서를 모았어요.</p></div>${state.user?`<button class="button button-primary" data-action="new-doc">${icons.plus}문서 만들기</button>`:""}</div>${docs.length?`<div class="recommend-grid">${docs.map(d=>`<button class="panel recommend-card" data-action="open-doc" data-id="${esc(d.id)}"><span class="recommend-tag">${esc(d.category||"추천 문서")}</span><strong class="recommend-title">${esc(d.title)}</strong><span class="recommend-description">${esc(documentPreviewText(d,125))}</span><span class="recommend-bottom"><span>최근 수정 ${nowLabel(d.updatedAt||Date.now())}</span><span>조회 ${d.views||0}</span></span></button>`).join("")}</div>`:`<section class="panel empty-state"><p class="empty-title">아직 추천 문서가 없어요</p></section>`}</div>`;
+  return `<div class="content-page"><div class="page-title-row"><div><p class="eyebrow">Explore the wiki</p><h1 class="page-title">추천 문서</h1><p class="page-subtitle">직접 작성된 문서 중 많이 읽히고 최근에 업데이트된 문서를 모았어요.</p></div>${state.user?`<button class="button button-primary" data-action="new-doc">${icons.plus}문서 만들기</button>`:""}</div>${docs.length?`<div class="recommend-grid">${docs.map(d=>`<button class="panel recommend-card" data-action="open-doc" data-id="${esc(d.id)}"><span class="recommend-tag">${esc(d.category||"추천 문서")}</span><strong class="recommend-title">${esc(d.title)}</strong><span class="recommend-description">${esc(documentPreviewText(d,125))}</span><span class="recommend-bottom"><span>최근 수정 ${nowLabel(d.updatedAt)}</span><span>조회 ${d.views||0}</span></span></button>`).join("")}</div>`:`<section class="panel empty-state"><p class="empty-title">아직 추천 문서가 없어요</p></section>`}</div>`;
 }
 function documentPreviewText(doc,maxLength=140){
   const summary=String(doc?.summary||"").trim();
@@ -780,7 +797,7 @@ function documentPreviewText(doc,maxLength=140){
   const text=String(preview.innerText||preview.textContent||"").replace(/\s+/g," ").trim();
   return text.length>maxLength?`${text.slice(0,Math.max(0,maxLength-1)).trimEnd()}…`:text;
 }
-function recommendScore(doc) { const days=Math.max(0,(Date.now()-(doc.updatedAt||Date.now()))/86400000);return (doc.views||0)*.25+Math.max(0,28-days)*.4; }
+function recommendScore(doc) { const updatedAt=timestampMillis(doc.updatedAt),days=updatedAt===null?Infinity:Math.max(0,(Date.now()-updatedAt)/86400000);return (doc.views||0)*.25+Math.max(0,28-days)*.4; }
 function getTrendList() {
   const byDocument=new Map();
   for(const [key,value] of Object.entries(state.searches)){
@@ -846,7 +863,7 @@ function renderSpecial() {
   if(state.specialTool==="blocks"&&!getAdminAccess())return `<div class="content-page"><div class="page-title-row"><div><p class="eyebrow">Special pages</p><h1 class="page-title">${title}</h1><p class="page-subtitle">${subtitle}</p></div></div><section class="panel empty-state"><div class="empty-mark">${icons.shield}</div><p class="empty-title">관리자만 확인할 수 있어요</p><p class="empty-copy">숨김 처리와 검토 내역은 관리자 센터에서 확인할 수 있습니다.</p></section></div>`;
   if(state.specialTool==="license")return `<div class="content-page"><div class="page-title-row"><div><p class="eyebrow">Wiki information</p><h1 class="page-title">${title}</h1><p class="page-subtitle">${subtitle}</p></div></div><section class="panel editor-panel"><h2 class="sidebar-title">문서 이용 안내</h2><p class="edit-note">현재 서현위키는 별도의 오픈 라이선스를 지정하지 않았습니다. 문서 내용을 다른 곳에서 재사용하기 전에는 작성자와 권리자의 허락을 확인하고, 인용한 정보에는 출처를 표시해 주세요.</p><p class="edit-note">다른 사람의 글·사진·개인 정보를 허락 없이 복사하거나 올리지 말아 주세요.</p></section></div>`;
   const items=specialResults(state.specialTool);
-  return `<div class="content-page"><div class="page-title-row"><div><p class="eyebrow">Special pages</p><h1 class="page-title">${title}</h1><p class="page-subtitle">${subtitle}</p></div></div><section class="panel special-list">${items.length?items.map(item=>`<div class="special-row"><div><strong>${esc(item.title)}</strong><small>${esc(item.summary||`${esc(item.category||"미분류")} · ${nowLabel(item.updatedAt||Date.now())}`)}</small></div>${state.specialTool==="blocks"?"":item.docId?`<button class="button button-secondary" data-action="open-doc" data-id="${esc(item.docId)}">문서 보기</button>`:item.id?`<button class="button button-secondary" data-action="open-doc" data-id="${esc(item.id)}">문서 보기</button>`:""}</div>`).join(""):`<div class="empty-state"><p class="empty-title">해당하는 문서가 없어요</p><p class="empty-copy">문서가 등록되거나 기준 날짜가 지나면 이 목록에 표시됩니다.</p></div>`}</section></div>`;
+  return `<div class="content-page"><div class="page-title-row"><div><p class="eyebrow">Special pages</p><h1 class="page-title">${title}</h1><p class="page-subtitle">${subtitle}</p></div></div><section class="panel special-list">${items.length?items.map(item=>`<div class="special-row"><div><strong>${esc(item.title)}</strong><small>${esc(item.summary||`${esc(item.category||"미분류")} · ${nowLabel(item.updatedAt)}`)}</small></div>${state.specialTool==="blocks"?"":item.docId?`<button class="button button-secondary" data-action="open-doc" data-id="${esc(item.docId)}">문서 보기</button>`:item.id?`<button class="button button-secondary" data-action="open-doc" data-id="${esc(item.id)}">문서 보기</button>`:""}</div>`).join(""):`<div class="empty-state"><p class="empty-title">해당하는 문서가 없어요</p><p class="empty-copy">문서가 등록되거나 기준 날짜가 지나면 이 목록에 표시됩니다.</p></div>`}</section></div>`;
 }
 function renderUpload() {
   return `<div class="content-page"><div class="page-title-row"><div><p class="eyebrow">Media links</p><h1 class="page-title">파일 올리기</h1><p class="page-subtitle">문서에 연결할 사진 또는 동영상 주소를 추가해요.</p></div></div><section class="panel upload-panel"><div class="admin-callout">${icons.shield}<span>Firebase Storage 직접 업로드는 현재 연결되어 있지 않아요. 무료 저장 공간을 아끼기 위해 공개된 파일 주소를 문서에 연결하는 방식으로 지원합니다. 사진 ${state.config.images}개, 동영상 ${state.config.videos}개 제한은 문서 저장 때 적용돼요.</span></div><form id="uploadUrlForm"><div class="field"><label for="uploadType">파일 종류</label><select id="uploadType" name="type"><option value="image">사진</option><option value="video">동영상 링크</option></select></div><div class="field"><label for="uploadUrl">공개 파일 주소</label><input id="uploadUrl" name="url" class="upload-url" type="url" placeholder="https://" required></div><div class="field"><label for="uploadAlt">사진 설명 (선택)</label><input id="uploadAlt" name="alt" placeholder="예: 학교 행사 안내 사진"></div><button class="button button-primary" type="submit">문서 편집기에 넣기 ${icons.arrow}</button></form><p class="field-hint" style="margin-top:14px">외부 주소를 사용할 때는 이용 권한이 있는 자료인지 확인하고, 학생 얼굴이나 개인 정보가 보이는 사진은 올리지 마세요.</p></section></div>`;
@@ -1058,7 +1075,7 @@ async function toggleEditRestriction(id){
   if(!canManageEditRestrictions()){toast("편집 제한을 바꿀 권한이 없어요.");return;}
   const restricted=!doc.editRestricted;
   if(state.firebase){try{await cloudToggleEditRestriction(doc,restricted);}catch(error){console.error(error);toast("편집 제한을 저장하지 못했어요. 권한과 Firestore 규칙을 확인해 주세요.");return;}}
-  doc.editRestricted=restricted;doc.updatedAt=Date.now();saveLocal();logDocumentChange(doc,"edit");render();toast(restricted?"이 문서는 편집 제안 승인 후 반영돼요.":"이 문서는 저장하면 바로 반영돼요.");
+  doc.editRestricted=restricted;saveLocal();render();toast(restricted?"이 문서는 일반 이용자의 편집 제안 승인 후 반영돼요.":"이 문서는 학교 계정으로 바로 편집할 수 있어요.");
 }
 async function submitEditProposal(doc,counts){
   if(!state.user){state.editingDraft=null;toast("편집 제안을 제출하려면 로그인해 주세요.");showLoginModal();return;}
@@ -1616,7 +1633,7 @@ document.addEventListener("click",async event=>{
     case "demo-admin":state.demoAdmin=true;state.isAdmin=false;modalClose();navigate("admin",{adminTab:"overview"});toast("관리자 화면 미리보기입니다. 변경 사항은 이 브라우저에만 저장돼요.");break;
     case "google-login":document.querySelector("#loginProfileForm")?.requestSubmit();break;
     case "sign-out":signOut();break;
-    case "toggle-doc":{const doc=state.docs.find(d=>d.id===id);if(doc){const wasHidden=doc.status==="hidden";doc.status=wasHidden?"published":"hidden";doc.updatedAt=Date.now();logDocumentChange(doc,wasHidden?"restore":"delete");saveLocal();if(state.firebase)cloudWriteDoc(doc).catch(console.error);render();toast(doc.status==="hidden"?"문서를 숨겼어요.":"문서를 다시 공개했어요.");}break;}
+    case "toggle-doc":{const doc=state.docs.find(d=>d.id===id);if(doc){const wasHidden=doc.status==="hidden",nextStatus=wasHidden?"published":"hidden";if(state.firebase){try{await cloudSetDocumentVisibility(id,nextStatus);}catch(error){console.error("문서 공개 상태 저장 실패:",error);toast("문서 공개 상태를 저장하지 못했어요. 관리자 권한을 확인해 주세요.");break;}}doc.status=nextStatus;logDocumentChange(doc,wasHidden?"restore":"delete");saveLocal();render();toast(doc.status==="hidden"?"문서를 숨겼어요.":"문서를 다시 공개했어요.");}break;}
     case "approve-request":approveRequest(id);break;
     case "reject-request":rejectRequest(id);break;
     case "approve-edit-proposal":reviewEditProposal(id,true);break;
@@ -2106,7 +2123,7 @@ function renderTocMarkup(headings=[]){if(!headings.length)return "";return `<nav
 function renderEditor(){
   const current=state.editorId?state.docs.find(d=>d.id===state.editorId):null,draft=state.editingDraft||{title:current?.title||"",category:current?.category||"",body:current?docEditorBody(current):""};
   const chars=draft.body.length,imageCount=countImages(draft.body),videoCount=countVideos(draft.body),over=chars>state.config.chars||imageCount>state.config.images||videoCount>state.config.videos,near=chars>state.config.chars*.8;
-  const approvalInfo=!current?"새 문서는 관리자 승인 후 공개됩니다.":current?.editRestricted&&!state.isAdmin?"이 문서는 편집 제안을 제출하고 권한 있는 이용자의 승인을 받아야 반영됩니다.":"일반 문서는 작성자가 아니어도 학교 계정으로 편집할 수 있고 저장 즉시 반영됩니다.";
+  const approvalInfo=!current?"새 문서는 관리자 승인 후 공개됩니다.":current?.editRestricted&&state.isAdmin?"편집 제한이 켜져 있지만 관리자 계정은 직접 수정할 수 있습니다. 일반 이용자의 수정은 편집 제안으로 접수돼 승인 후 반영됩니다.":current?.editRestricted?"이 문서는 편집 제안을 제출하고 권한 있는 이용자의 승인을 받아야 반영됩니다.":"일반 문서는 작성자가 아니어도 학교 계정으로 편집할 수 있고 저장 즉시 반영됩니다.";
   const grammar=WikiParser.editorGuideHtml(),sourceFirst=needsSourceEditor(draft.body);
   return `<div class="content-page"><div class="page-title-row"><div><p class="eyebrow">Write together</p><h1 class="page-title">${current?"문서 편집":"새 문서 만들기"}</h1><p class="page-subtitle">확인한 정보를 알기 쉽게 정리해 주세요.</p></div></div><form class="panel editor-panel" id="editorForm"><div class="admin-callout">${icons.shield}<span>${approvalInfo} 글자 <strong>${state.config.chars.toLocaleString()}자</strong>, 사진 링크 <strong>${state.config.images}개</strong>, 동영상 링크 <strong>${state.config.videos}개</strong> 제한을 넘긴 편집도 승인 후 반영됩니다.</span></div>
     <div class="field"><label for="docTitle">문서 제목</label><input id="docTitle" name="title" required maxlength="80" placeholder="예: 동아리, 급식, 학교 행사" value="${esc(draft.title)}"></div>
