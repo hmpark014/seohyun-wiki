@@ -634,3 +634,10 @@ body.dark .editor-toc-placeholder{border-color:#53566c;background:#292b3b;color:
 body.dark .editor-toc-placeholder span{color:#a5aabb}
 @media(max-width:700px){.editor-visual-canvas.article-body{min-height:340px;padding:14px}.editor-toolbar-rich select{min-width:92px}.editor-toolbar-rich{gap:5px}}
 .shuffle-button svg{width:18px;height:18px;stroke-width:2}
+.admin-doc-restriction-help{margin:0;padding:9px 16px;border-bottom:1px solid var(--line);background:var(--soft);color:#777d8c;font-size:10px;line-height:1.6}
+.admin-doc-restriction-help strong{color:#5149c6}
+.admin-doc-actions .admin-restriction-action{border-color:#e2e0f6;background:#f7f6ff;color:#5149c6}
+.admin-doc-actions .admin-restriction-action:hover{border-color:#c9c6f3;background:#eeedff;color:#4038ae}
+body.dark .admin-doc-restriction-help{border-color:#35384a;background:#292b3d;color:#aeb4c5}
+body.dark .admin-doc-restriction-help strong,body.dark .admin-doc-actions .admin-restriction-action{color:#d0ccff}
+body.dark .admin-doc-actions .admin-restriction-action{border-color:#4b496d;background:#303149}
