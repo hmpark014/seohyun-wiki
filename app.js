@@ -266,6 +266,7 @@ async function syncEditorAuthorization(){
   state.adminRequestsUnsubscribe?.();state.adminRequestsUnsubscribe=null;
   state.adminProfilesUnsubscribe?.();state.adminProfilesUnsubscribe=null;
   state.adminPermissionsUnsubscribe?.();state.adminPermissionsUnsubscribe=null;
+  state.requests=[];state.editRequests=[];
   state.editorAccess={canApproveEditRequests:false,canManageRestrictions:false};
   if(!state.isAdmin){state.userProfiles=[];state.editorPermissions={};}
   if(!state.firebase||!state.user)return;
@@ -281,17 +282,19 @@ async function syncEditorAuthorization(){
           state.editRequests=snapshot.docs.map(item=>{const data=item.data();return {id:item.id,...data,createdAt:data.createdAt?.toMillis?.()||data.createdAt};});saveLocal();
           if(state.view==="admin"&&modalWrap.hidden&&!document.activeElement?.matches("input,textarea"))render();
         },error=>console.warn("편집 제안 실시간 동기화에 실패했습니다.",error));
-      }else if(!canApproveEditRequests()&&state.editRequestsUnsubscribe){state.editRequestsUnsubscribe();state.editRequestsUnsubscribe=null;}
+      }else if(!canApproveEditRequests()&&state.editRequestsUnsubscribe){state.editRequestsUnsubscribe();state.editRequestsUnsubscribe=null;state.editRequests=[];}
+      if(canApproveEditRequests()&&!state.adminRequestsUnsubscribe){
+        state.adminRequestsUnsubscribe=onSnapshot(collection(state.firebase.db,"limitRequests"),snapshot=>{
+          state.requests=snapshot.docs.map(item=>{const data=item.data();return {...data,id:item.id,createdAt:data.createdAt?.toMillis?.()||data.createdAt,reviewedAt:data.reviewedAt?.toMillis?.()||data.reviewedAt};});saveLocal();
+          if(state.view==="admin"&&modalWrap.hidden&&!document.activeElement?.matches("input,textarea"))render();
+        },error=>console.warn("작성 승인 요청 실시간 동기화에 실패했습니다.",error));
+      }else if(!canApproveEditRequests()&&state.adminRequestsUnsubscribe){state.adminRequestsUnsubscribe();state.adminRequestsUnsubscribe=null;state.requests=[];}
       updateAccountButton();
       if(["article","admin"].includes(state.view)&&modalWrap.hidden&&!document.activeElement?.matches("input,textarea"))render();
     };
     applyPermission(await getDoc(permissionRef));
     state.editorPermissionUnsubscribe=onSnapshot(permissionRef,applyPermission,error=>console.warn("편집 권한 실시간 동기화에 실패했습니다.",error));
     if(state.isAdmin){
-      state.adminRequestsUnsubscribe=onSnapshot(collection(state.firebase.db,"limitRequests"),snapshot=>{
-        state.requests=snapshot.docs.map(item=>{const data=item.data();return {...data,id:item.id,createdAt:data.createdAt?.toMillis?.()||data.createdAt,reviewedAt:data.reviewedAt?.toMillis?.()||data.reviewedAt};});saveLocal();
-        if(state.view==="admin"&&modalWrap.hidden&&!document.activeElement?.matches("input,textarea"))render();
-      },error=>console.warn("작성 승인 요청 실시간 동기화에 실패했습니다.",error));
       const [profiles,permissions]=await Promise.all([getDocs(collection(state.firebase.db,"userProfiles")),getDocs(collection(state.firebase.db,"editorPermissions"))]);
       state.userProfiles=profiles.docs.map(item=>({id:item.id,...item.data()}));
       state.editorPermissions=Object.fromEntries(permissions.docs.map(item=>[item.id,item.data()]));
@@ -1099,7 +1102,7 @@ async function setEditorPermission(uid,granted){
   const profile=state.userProfiles.find(item=>item.id===uid);if(!profile)return;
   try{if(state.firebase)await cloudSetEditorPermission(uid,profile,granted);}catch(error){console.error(error);toast("권한 변경을 저장하지 못했어요.");return;}
   if(granted)state.editorPermissions[uid]={canApproveEditRequests:true,canManageRestrictions:true,email:profile.email,displayName:profile.displayName};else delete state.editorPermissions[uid];
-  render();toast(granted?`${profile.displayName||profile.email}에게 편집 관리 권한을 부여했어요.`:"편집 관리 권한을 회수했어요.");
+  render();toast(granted?`${profile.displayName||profile.email}에게 검토 권한을 부여했어요.`:"검토 권한을 회수했어요.");
 }
 function requestDocumentDelete(id) {
   const doc=state.docs.find(item=>item.id===id);
@@ -1151,7 +1154,8 @@ function renderAdmin() {
   const pending=pendingLimits+pendingEdits+pendingReports;
   const canManageMaintenance=state.isAdmin&&Boolean(state.firebase)&&state.maintenanceStatusLoaded&&!state.maintenanceBusy;
   const maintenanceControl=fullAccess?`<section class="panel maintenance-admin-card ${state.maintenance.enabled?"is-active":""}"><div class="maintenance-admin-copy"><span class="maintenance-status ${state.maintenance.enabled?"is-active":""}"><i aria-hidden="true"></i>${state.maintenanceStatusLoaded?(state.maintenance.enabled?"점검 중":"정상 운영") : "상태 확인 중"}</span><h2>서버 점검</h2><p>${state.maintenance.enabled?"일반 이용자는 점검 안내 화면만 볼 수 있어요. 관리자는 계속 관리자 센터를 이용할 수 있습니다.":"시작하면 모든 이용자에게 점검 안내가 표시되고, 관리자 계정만 사이트를 계속 이용할 수 있습니다."}${state.demoAdmin?" 실제 운영 설정은 Firebase 관리자 계정에서 바꿔 주세요.":""}</p></div><button class="button ${state.maintenance.enabled?"button-danger":"button-primary"} maintenance-toggle" type="button" data-action="toggle-maintenance" ${canManageMaintenance?"":"disabled"}>${state.maintenanceBusy?"저장 중…":state.maintenance.enabled?"점검 종료":"점검 모드 시작"}</button></section>`:"";
-  const tabs=fullAccess?[["overview","개요"],["docs","문서 관리"],["requests","승인 요청",pendingLimits],["editRequests","편집 제안",pendingEdits],["permissions","편집 권한"],["reports","신고 검토",pendingReports],["settings","작성 제한"]]:[["editRequests","편집 제안",pendingEdits]];
+  if(!fullAccess&&!['requests','editRequests'].includes(state.adminTab))state.adminTab="requests";
+  const tabs=fullAccess?[["overview","개요"],["docs","문서 관리"],["requests","작성 승인 요청",pendingLimits],["editRequests","편집 제안",pendingEdits],["permissions","권한 부여"],["reports","신고 검토",pendingReports],["settings","작성 제한"]]:[["requests","작성 승인 요청",pendingLimits],["editRequests","편집 제안",pendingEdits]];
   let body="";
   if(state.adminTab==="overview"&&fullAccess){
     const tasks=[
@@ -1163,7 +1167,7 @@ function renderAdmin() {
       ["공개 문서",liveDocs().length,"docs","문서 목록"],
       ["숨김 문서",state.docs.filter(d=>!d.sample&&d.status==="hidden").length,"docs","문서 목록"],
       ["검토 대기",pending,"editRequests","검토 목록"],
-      ["이용자",state.userProfiles.length,"permissions","권한 관리"]
+      ["이용자",state.userProfiles.length,"permissions","권한 부여"]
     ];
     body=`${maintenanceControl}<section class="panel admin-work-panel"><div class="admin-section-heading"><div><h2>검토할 항목</h2><p>확인할 항목을 선택하면 해당 목록으로 이동합니다.</p></div><span class="admin-pending-total">대기 ${pending}건</span></div><div class="admin-work-list">${tasks.map(task=>`<button type="button" class="admin-work-row" data-action="admin-tab" data-tab="${task.tab}"><span class="admin-work-count ${task.count?"needs-review":""}">${task.count||"–"}</span><span class="admin-work-copy"><strong>${task.title}</strong><small>${task.copy}</small></span><span class="admin-work-arrow" aria-hidden="true">›</span></button>`).join("")}</div></section><section class="admin-metrics" aria-label="위키 현황">${stats.map(([label,value,tab,action])=>`<button type="button" class="admin-metric" data-action="admin-tab" data-tab="${tab}"><span>${label}</span><strong>${Number(value).toLocaleString()}</strong><small>${action}</small></button>`).join("")}</section>`;
   }
@@ -1176,7 +1180,7 @@ function renderAdmin() {
     }).join("");
     body=`<section class="panel admin-doc-panel"><div class="admin-doc-toolbar"><label class="admin-doc-search">${icons.search}<input id="adminDocSearch" type="search" placeholder="문서명, 분류, 작성자 검색" aria-label="문서 검색"></label><label class="admin-doc-filter"><span class="sr-only">문서 상태 필터</span><select id="adminDocFilter"><option value="all">모든 문서</option><option value="published">공개 문서</option><option value="hidden">숨김 문서</option><option value="restricted">편집 제한 문서</option></select></label><span id="adminDocCount" class="admin-doc-count">${managedDocs.length}개 문서</span></div>${canManageEditRestrictions()?'<p class="admin-doc-restriction-help">문서별 <strong>편집 제한 설정</strong>을 누르면 모든 수정이 편집 제안으로 접수되고, 관리자 또는 권한 있는 편집자의 승인 후 반영됩니다.</p>':''}<div class="admin-doc-list">${rows||`<div class="empty-state admin-list-empty"><p class="empty-title">등록된 문서가 없어요</p><p class="empty-copy">새 문서를 작성하면 이곳에서 관리할 수 있습니다.</p></div>`}<div id="adminDocsNoResults" class="admin-doc-no-results" hidden>조건에 맞는 문서가 없습니다. 검색어나 필터를 바꿔 보세요.</div></div></section>`;
   }
-  if(state.adminTab==="requests"&&fullAccess){
+  if(state.adminTab==="requests"&&canApproveEditRequests()){
     const rows=state.requests.map(r=>{
       const status=r.status==="pending"?"승인 대기":r.status==="approved"?"승인됨":"거절됨";
       const searchable=normalizeSearchText([r.title,r.author,r.authorEmail,r.authorUid,r.ownerUid,r.uid,r.reason,r.status,status,r.body].filter(Boolean).join(" "));
@@ -1185,7 +1189,7 @@ function renderAdmin() {
     const empty=`<div class="empty-state"><div class="empty-mark">${icons.shield}</div><p class="empty-title">대기 중인 승인 요청이 없어요</p><p class="empty-copy">새 문서와 작성 제한 초과 요청이 이곳에 표시됩니다.</p></div>`;
     body=`<section class="panel admin-list-panel">${adminSearchToolbar("adminRequestSearch","문서명, 작성자, 요청 내용 검색",state.requests.length,"승인 요청 검색")}${rows||empty}${adminSearchNoResults("adminRequestSearch")}</section>`;
   }
-  if(state.adminTab==="editRequests"){
+  if(state.adminTab==="editRequests"&&canApproveEditRequests()){
     const proposals=state.editRequests.filter(r=>r.status==="pending");
     const rows=proposals.map(r=>{
       const docTitle=state.docs.find(d=>d.id===r.docId)?.title||r.docId;
@@ -1200,10 +1204,10 @@ function renderAdmin() {
     const rows=profiles.map(profile=>{
       const granted=state.editorPermissions[profile.id]?.canApproveEditRequests===true;
       const searchable=normalizeSearchText([profile.displayName,profile.email,profile.id,profile.studentNumber].filter(Boolean).join(" "));
-      return `<article class="request-row" data-admin-search-row="adminPermissionSearch" data-search="${esc(searchable)}"><div class="request-copy"><div class="request-title">${esc(profile.displayName||"이름 없음")}</div><div class="request-detail">${esc(profile.email||profile.id)} · ${granted?"편집 제안 검토 가능":"일반 이용자"}</div></div><div class="request-actions"><button class="button ${granted?"button-secondary":"button-primary"}" data-action="set-editor-permission" data-uid="${esc(profile.id)}" data-granted="${granted?"false":"true"}">${granted?"권한 회수":"권한 부여"}</button></div></article>`;
+      return `<article class="request-row" data-admin-search-row="adminPermissionSearch" data-search="${esc(searchable)}"><div class="request-copy"><div class="request-title">${esc(profile.displayName||"이름 없음")}</div><div class="request-detail">${esc(profile.email||profile.id)} · ${granted?"편집 제안·작성 승인 검토 가능":"일반 이용자"}</div></div><div class="request-actions"><button class="button ${granted?"button-secondary":"button-primary"}" data-action="set-editor-permission" data-uid="${esc(profile.id)}" data-granted="${granted?"false":"true"}">${granted?"권한 회수":"권한 부여"}</button></div></article>`;
     }).join("");
     const empty=`<div class="empty-state"><p class="empty-title">아직 로그인한 학교 계정이 없어요</p><p class="empty-copy">학교 계정으로 로그인한 이용자가 이 목록에 표시됩니다.</p></div>`;
-    body=`<section class="panel admin-list-panel"><div class="admin-list-intro"><strong>편집 권한을 관리해요</strong><p>권한을 받은 이용자는 제한 문서의 편집 제안을 검토할 수 있습니다. 권한은 언제든 회수할 수 있어요.</p></div>${adminSearchToolbar("adminPermissionSearch","이름, 학번, 이메일 검색",profiles.length,"이용자 검색")}${rows||empty}${adminSearchNoResults("adminPermissionSearch")}</section>`;
+    body=`<section class="panel admin-list-panel"><div class="admin-list-intro"><strong>검토 권한을 부여해요</strong><p>권한을 받은 이용자는 편집 제안과 작성 승인 요청을 검토할 수 있습니다. 권한은 언제든 회수할 수 있어요.</p></div>${adminSearchToolbar("adminPermissionSearch","이름, 학번, 이메일 검색",profiles.length,"이용자 검색")}${rows||empty}${adminSearchNoResults("adminPermissionSearch")}</section>`;
   }
   if(state.adminTab==="reports"&&fullAccess){
     const rows=state.reports.map(r=>{
@@ -1216,8 +1220,8 @@ function renderAdmin() {
     body=`<section class="panel admin-list-panel">${adminSearchToolbar("adminReportSearch","문서명, 신고 사유 검색",state.reports.length,"신고 검색")}${rows||empty}${adminSearchNoResults("adminReportSearch")}</section>`;
   }
   if(state.adminTab==="settings"&&fullAccess) body=`<div class="settings-grid"><section class="panel settings-card"><h3>문서 작성 제한</h3><p class="admin-settings-help">저장 공간과 검토 부담을 고려해 문서별 최대 작성량을 정합니다.</p><label class="setting-inline"><span>문서 최대 글자 수</span><input type="number" min="500" max="50000" step="500" data-setting="chars" value="${state.config.chars}"></label><label class="setting-inline"><span>사진 링크 최대 수</span><input type="number" min="0" max="20" data-setting="images" value="${state.config.images}"></label><label class="setting-inline"><span>동영상 링크 최대 수</span><input type="number" min="0" max="10" data-setting="videos" value="${state.config.videos}"></label><button class="button button-primary" style="margin-top:14px" data-action="save-limits">제한 저장</button><p class="admin-settings-note">제한을 변경하면 Firestore 보안 규칙도 같은 기준으로 맞춰야 합니다.</p></section><section class="panel settings-card"><h3>편집과 승인 안내</h3><p class="admin-settings-help">새 문서는 관리자 승인 후 공개됩니다. 일반 문서는 작성자와 관계없이 학교 계정 누구나 편집해 즉시 저장할 수 있고, 편집 제한 문서와 작성량 초과 편집은 승인 후 반영됩니다.</p></section></div>`;
-  const title=fullAccess?"관리자 센터":"편집 제안 검토";
-  return `<div class="content-page admin-page"><div class="page-title-row"><div class="admin-title-copy"><p class="eyebrow">${fullAccess?"Admin workspace":"Editor workspace"}</p><h1 class="page-title">${title}</h1><p class="page-subtitle">${fullAccess?"문서와 이용자, 검토 요청을 한곳에서 관리합니다.":"권한 있는 이용자만 편집 제안을 검토할 수 있어요."}${state.demoAdmin?" · 로컬 미리보기":""}</p><button class="button button-secondary admin-return-button" data-action="admin-exit">사이트로 돌아가기</button></div></div><nav class="admin-tabs" aria-label="관리자 메뉴">${tabs.map(([id,label,count])=>`<button class="${state.adminTab===id?"active":""}" data-action="admin-tab" data-tab="${id}">${label}${count?`<span class="admin-tab-count">${count}</span>`:""}</button>`).join("")}</nav>${body}</div>`;
+  const title=fullAccess?"관리자 센터":"승인 검토";
+  return `<div class="content-page admin-page"><div class="page-title-row"><div class="admin-title-copy"><p class="eyebrow">${fullAccess?"Admin workspace":"Review workspace"}</p><h1 class="page-title">${title}</h1><p class="page-subtitle">${fullAccess?"문서와 이용자, 검토 요청을 한곳에서 관리합니다.":"권한 있는 이용자는 편집 제안과 작성 승인 요청을 검토할 수 있어요."}${state.demoAdmin?" · 로컬 미리보기":""}</p><button class="button button-secondary admin-return-button" data-action="admin-exit">사이트로 돌아가기</button></div></div><nav class="admin-tabs" aria-label="관리자 메뉴">${tabs.map(([id,label,count])=>`<button class="${state.adminTab===id?"active":""}" data-action="admin-tab" data-tab="${id}">${label}${count?`<span class="admin-tab-count">${count}</span>`:""}</button>`).join("")}</nav>${body}</div>`;
 }
 function filterAdminDocRows() {
   const rows=[...document.querySelectorAll("[data-admin-doc-row]")];
@@ -1405,20 +1409,24 @@ async function requestLimitApproval(doc,counts,reason="작성 제한 초과 편�
   return true;
 }
 async function approveRequest(id) {
-  if(!getAdminAccess()){toast("승인 권한이 있는 관리자만 처리할 수 있어요.");return;}
+  if(!canApproveEditRequests()){toast("작성 승인 요청을 검토할 권한이 없어요.");return;}
   const req=state.requests.find(r=>r.id===id);if(!req)return;
+  const ownerUid=req.ownerUid||req.uid||req.authorUid;
+  if(!state.isAdmin&&ownerUid&&ownerUid===state.user?.uid){toast("본인이 제출한 요청은 승인할 수 없어요.");return;}
   if(!req.body){toast("요청 내용이 없어 승인할 수 없어요.");return;}
   const docId=req.docId||slugify(req.title),index=state.docs.findIndex(item=>item.id===docId),existing=index>=0?state.docs[index]:null;
-  const doc={id:docId,title:req.title,category:req.category,summary:req.summary||req.body.slice(0,160),body:req.body,images:req.mediaImages||[],videos:req.mediaVideos||[],views:existing?.views||0,updatedAt:Date.now(),author:req.author||existing?.author||"이용자",authorUid:req.authorUid||existing?.authorUid||null,editRestricted:Boolean(req.editRestricted||existing?.editRestricted),status:existing?.status||"published",sample:false};
-  if(state.firebase){try{await cloudReviewLimitRequest(req,doc,true);}catch(error){console.error("승인 문서 저장 실패:",error);toast("승인 저장에 실패했어요. 문서는 아직 공개되지 않았습니다. Firestore 규칙과 관리자 로그인을 확인해 주세요.");return;}}
+  const doc={id:docId,title:req.title,category:req.category,summary:req.summary||req.body.slice(0,160),body:req.body,images:req.mediaImages||[],videos:req.mediaVideos||[],views:existing?.views||0,updatedAt:Date.now(),author:req.author||existing?.author||"이용자",authorUid:req.authorUid||existing?.authorUid||null,editRestricted:Boolean(req.editRestricted||existing?.editRestricted),status:existing?.status||"published",sample:false,approvedLimitRequestId:req.id};
+  if(state.firebase){try{await cloudReviewLimitRequest(req,doc,true);}catch(error){console.error("승인 문서 저장 실패:",error);toast("승인 저장에 실패했어요. 문서는 아직 공개되지 않았습니다. 검토 권한과 Firestore 규칙 배포 여부를 확인해 주세요.");return;}}
   req.status="approved";
   logDocumentChange(doc,existing?"edit":"new",existing?.body||"");if(existing)state.docs[index]=doc;else state.docs.unshift(doc);
   saveLocal();render();toast("요청을 승인하고 문서를 공개했어요.");
 }
 async function rejectRequest(id) {
-  if(!getAdminAccess()){toast("승인 권한이 있는 관리자만 처리할 수 있어요.");return;}
+  if(!canApproveEditRequests()){toast("작성 승인 요청을 검토할 권한이 없어요.");return;}
   const req=state.requests.find(r=>r.id===id);if(!req)return;
-  if(state.firebase){try{await cloudReviewLimitRequest(req,null,false);}catch(error){console.error("승인 요청 거절 실패:",error);toast("거절 상태를 Firebase에 저장하지 못했어요.");return;}}
+  const ownerUid=req.ownerUid||req.uid||req.authorUid;
+  if(!state.isAdmin&&ownerUid&&ownerUid===state.user?.uid){toast("본인이 제출한 요청은 검토할 수 없어요.");return;}
+  if(state.firebase){try{await cloudReviewLimitRequest(req,null,false);}catch(error){console.error("승인 요청 거절 실패:",error);toast("거절 상태를 저장하지 못했어요. 검토 권한과 Firestore 규칙 배포 여부를 확인해 주세요.");return;}}
   req.status="rejected";
   saveLocal();render();toast("승인 요청을 거절했어요.");
 }
@@ -1438,7 +1446,7 @@ async function reviewReport(id) {
 function showLoginModal() {
   if(state.profileSetupRequired){showStudentProfileModal("setup");return;}
   if(state.user||state.demoAdmin){
-    const workspaceButton=canOpenAdminWorkspace()?`<button class="button button-secondary" style="width:100%;margin:0 0 12px" data-action="open-admin">${getAdminAccess()?"관리자 센터 열기":"편집 제안 검토"}</button>`:"";
+    const workspaceButton=canOpenAdminWorkspace()?`<button class="button button-secondary" style="width:100%;margin:0 0 12px" data-action="open-admin">${getAdminAccess()?"관리자 센터 열기":"승인 요청 검토"}</button>`:"";
     const profile=studentProfileFromDisplayName(state.user?.displayName);
     modalOpen(`${modalHeader("내 계정", "서현위키 계정 정보를 확인합니다.")}<div class="auth-user"><span class="avatar">${esc(profile?.name.slice(0,1)||state.user?.displayName?.slice(0,1)||"관")}</span><div><strong>${esc(state.user?.displayName||"관리자 미리보기")}</strong><small>${esc(state.user?.email||"로컬 데모 계정")}</small></div></div>${profile?`<div class="profile-action-row"><button class="button button-secondary" data-action="change-profile-name">이름 변경</button><button class="button button-secondary" data-action="change-profile-number">학번 변경</button></div>`:""}${state.user?`<button class="button button-primary" style="width:100%;margin:0 0 12px" data-action="new-doc">문서 작성</button>`:""}${workspaceButton}<div class="modal-actions"><button class="button button-secondary" data-action="sign-out">로그아웃</button><button class="button button-secondary" data-action="close-modal">닫기</button></div>`);return;
   }
@@ -1633,7 +1641,7 @@ document.addEventListener("click",async event=>{
       break;
     }
     case "confirm-maintenance":await saveMaintenanceMode(target.dataset.enabled==="true");break;
-    case "open-admin":modalClose();state.adminTab=getAdminAccess()?"overview":"editRequests";navigate("admin");break;
+    case "open-admin":modalClose();state.adminTab=getAdminAccess()?"overview":"requests";navigate("admin");break;
     case "admin-exit":navigate("home");break;
     case "demo-admin":state.demoAdmin=true;state.isAdmin=false;modalClose();navigate("admin",{adminTab:"overview"});toast("관리자 화면 미리보기입니다. 변경 사항은 이 브라우저에만 저장돼요.");break;
     case "google-login":document.querySelector("#loginProfileForm")?.requestSubmit();break;
