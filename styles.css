@@ -467,6 +467,7 @@ body.dark .article-body .wiki-quote{border-color:#555a52;color:#b8bbb2}
 .admin-page .admin-return-button{margin-top:12px}
 .admin-list-panel .request-row[hidden]{display:none!important}
 .profile-fixed-number{display:flex;align-items:center;gap:9px;margin:0 0 12px;padding:11px 12px;border:1px solid #e5e8f0;border-radius:9px;background:#f7f8fc;color:#697082;font-size:11px}.profile-fixed-number strong{color:#34394b}.profile-fixed-number small{margin-left:auto;color:#9096a5;font-size:9px}body.dark .profile-fixed-number{border-color:#3b3e52;background:#292b3b;color:#b4bacb}body.dark .profile-fixed-number strong{color:#eef0f7}body.dark .profile-fixed-number small{color:#a5aabb}
+.profile-action-row{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:12px}.profile-action-row .button{width:100%;margin:0}
 
 /* Wiki writing syntax: tables, nested list levels, footnotes and safe embeds. */
 .article-body h4,.article-body h5,.article-body h6{scroll-margin-top:24px;margin:23px 0 8px;color:#42433d;font-size:16px;font-weight:700;line-height:1.5;letter-spacing:-.025em}

@@ -1440,9 +1440,9 @@ function showLoginModal() {
   if(state.user||state.demoAdmin){
     const workspaceButton=canOpenAdminWorkspace()?`<button class="button button-secondary" style="width:100%;margin:0 0 12px" data-action="open-admin">${getAdminAccess()?"관리자 센터 열기":"편집 제안 검토"}</button>`:"";
     const profile=studentProfileFromDisplayName(state.user?.displayName);
-    modalOpen(`${modalHeader("내 계정", "서현위키 계정 정보를 확인합니다.")}<div class="auth-user"><span class="avatar">${esc(profile?.name.slice(0,1)||state.user?.displayName?.slice(0,1)||"관")}</span><div><strong>${esc(state.user?.displayName||"관리자 미리보기")}</strong><small>${esc(state.user?.email||"로컬 데모 계정")}</small></div></div>${profile?`<button class="button button-secondary" style="width:100%;margin:0 0 12px" data-action="change-profile-name">이름 변경</button>`:""}${state.user?`<button class="button button-primary" style="width:100%;margin:0 0 12px" data-action="new-doc">문서 작성</button>`:""}${workspaceButton}<div class="modal-actions"><button class="button button-secondary" data-action="sign-out">로그아웃</button><button class="button button-secondary" data-action="close-modal">닫기</button></div>`);return;
+    modalOpen(`${modalHeader("내 계정", "서현위키 계정 정보를 확인합니다.")}<div class="auth-user"><span class="avatar">${esc(profile?.name.slice(0,1)||state.user?.displayName?.slice(0,1)||"관")}</span><div><strong>${esc(state.user?.displayName||"관리자 미리보기")}</strong><small>${esc(state.user?.email||"로컬 데모 계정")}</small></div></div>${profile?`<div class="profile-action-row"><button class="button button-secondary" data-action="change-profile-name">이름 변경</button><button class="button button-secondary" data-action="change-profile-number">학번 변경</button></div>`:""}${state.user?`<button class="button button-primary" style="width:100%;margin:0 0 12px" data-action="new-doc">문서 작성</button>`:""}${workspaceButton}<div class="modal-actions"><button class="button button-secondary" data-action="sign-out">로그아웃</button><button class="button button-secondary" data-action="close-modal">닫기</button></div>`);return;
   }
-  modalOpen(`${modalHeader("서현위키 로그인", "Google 학교 계정으로 로그인해 주세요.")}<div class="auth-options">${isFirebaseConfigured?`<form id="loginProfileForm" class="login-profile-form"><div class="profile-visibility-note">처음 로그인한 계정은 Google 인증 후 학번과 이름을 한 번 등록합니다. 이후에는 다시 입력할 필요가 없고, 계정 메뉴에서 이름을 바꿀 수 있어요. 학번과 이름은 작성자 닉네임으로 공개됩니다.</div><button class="auth-google-button" type="submit"><span class="auth-google-mark" aria-hidden="true">G</span><span>Google 계정으로 로그인</span></button></form>`:`<div class="modal-note auth-config-note">지금은 로컬 미리보기입니다. Firebase 설정 후 Google 로그인이 활성화됩니다.</div>`}</div>`);
+  modalOpen(`${modalHeader("서현위키 로그인", "Google 학교 계정으로 로그인해 주세요.")}<div class="auth-options">${isFirebaseConfigured?`<form id="loginProfileForm" class="login-profile-form"><div class="profile-visibility-note">처음 로그인한 계정은 Google 인증 후 학번과 이름을 한 번 등록합니다. 이후에는 다시 입력할 필요가 없고, 계정 메뉴에서 이름과 학번을 변경할 수 있어요. 학번과 이름은 작성자 닉네임으로 공개됩니다.</div><button class="auth-google-button" type="submit"><span class="auth-google-mark" aria-hidden="true">G</span><span>Google 계정으로 로그인</span></button></form>`:`<div class="modal-note auth-config-note">지금은 로컬 미리보기입니다. Firebase 설정 후 Google 로그인이 활성화됩니다.</div>`}</div>`);
 }
 function normalizeProfileText(value="") {
   return String(value).normalize("NFKC").toLocaleLowerCase("ko-KR").replace(/[\s\p{P}\p{S}\p{Cf}]+/gu,"");
@@ -1464,25 +1464,30 @@ function rejectProfileInput(input,message) {
 }
 function showStudentProfileModal(mode="setup") {
   if(mode==="setup"&&modal.querySelector("#studentProfileForm"))return;
-  const editing=mode==="name",profile=studentProfileFromDisplayName(state.user?.displayName);
-  if(editing&&!profile){toast("저장된 학번과 이름을 찾지 못했어요. 다시 로그인해 주세요.");return;}
+  const setup=mode==="setup",editingName=mode==="name",editingNumber=mode==="number",profile=studentProfileFromDisplayName(state.user?.displayName);
+  if(!setup&&!profile){toast("저장된 학번과 이름을 찾지 못했어요. 다시 로그인해 주세요.");return;}
   const setupDescription="다른 이용자에게 공개될 작성자 이름을 등록합니다.";
-  const form=editing
-    ?`<div class="profile-fixed-number"><span>학번</span><strong>${esc(profile.studentNumber)}</strong><small>학번은 변경되지 않아요.</small></div><div class="field"><label for="profileName">이름</label><input id="profileName" name="studentName" value="${esc(profile.name)}" autocomplete="name" maxlength="24" pattern="[가-힣]+" required placeholder="한글 이름만 입력해 주세요"></div><div class="profile-visibility-note">학번과 이름이 함께 작성자 닉네임으로 표시됩니다.</div><div class="modal-actions"><button type="button" class="button button-secondary" data-action="close-modal">취소</button><button type="submit" class="button button-primary">이름 저장</button></div>`
-    :`<div class="field"><label for="profileStudentNumber">학번</label><input id="profileStudentNumber" name="studentNumber" inputmode="numeric" autocomplete="off" maxlength="5" pattern="[0-9]{5}" required placeholder="숫자 5자리"></div><div class="field"><label for="profileName">이름</label><input id="profileName" name="studentName" autocomplete="name" maxlength="24" pattern="[가-힣]+" required placeholder="한글 이름만 입력해 주세요"></div><div class="profile-visibility-note">학번과 이름이 모두 작성자 닉네임으로 공개됩니다. 학번은 학교 계정 이메일 숫자와 달라도 됩니다.</div><label class="check-row profile-consent"><input type="checkbox" name="publicProfileConsent" required><span>학번과 이름이 공개되는 것에 동의합니다.</span></label><div class="modal-actions"><button type="button" class="button button-secondary" data-action="sign-out">로그아웃</button><button type="submit" class="button button-primary">등록하고 계속</button></div>`;
-  modalOpen(`${modalHeader(editing?"이름 변경":"학번과 이름 등록",editing?"공개되는 이름을 수정합니다.":setupDescription)}<form id="studentProfileForm" data-mode="${mode}" class="login-profile-form">${form}</form>`);
+  const form=editingName
+    ?`<div class="profile-fixed-number"><span>학번</span><strong>${esc(profile.studentNumber)}</strong><small>학번은 그대로 유지돼요.</small></div><div class="field"><label for="profileName">이름</label><input id="profileName" name="studentName" value="${esc(profile.name)}" autocomplete="name" maxlength="24" pattern="[가-힣]+" required placeholder="한글 이름만 입력해 주세요"></div><div class="profile-visibility-note">학번과 이름이 함께 작성자 닉네임으로 표시됩니다.</div><div class="modal-actions"><button type="button" class="button button-secondary" data-action="close-modal">취소</button><button type="submit" class="button button-primary">이름 저장</button></div>`
+    :editingNumber
+      ?`<div class="field"><label for="profileStudentNumber">새 학번</label><input id="profileStudentNumber" name="studentNumber" value="${esc(profile.studentNumber)}" inputmode="numeric" autocomplete="off" maxlength="5" pattern="[0-9]{5}" required placeholder="숫자 5자리"></div><div class="profile-fixed-number"><span>이름</span><strong>${esc(profile.name)}</strong><small>이름은 그대로 유지돼요.</small></div><div class="profile-visibility-note">3학년으로 진급해 새 학번을 받으면 숫자 5자리를 입력해 주세요. 저장하면 작성자 표시에 바로 반영됩니다.</div><div class="modal-actions"><button type="button" class="button button-secondary" data-action="close-modal">취소</button><button type="submit" class="button button-primary">학번 저장</button></div>`
+      :`<div class="field"><label for="profileStudentNumber">학번</label><input id="profileStudentNumber" name="studentNumber" inputmode="numeric" autocomplete="off" maxlength="5" pattern="[0-9]{5}" required placeholder="숫자 5자리"></div><div class="field"><label for="profileName">이름</label><input id="profileName" name="studentName" autocomplete="name" maxlength="24" pattern="[가-힣]+" required placeholder="한글 이름만 입력해 주세요"></div><div class="profile-visibility-note">학번과 이름이 모두 작성자 닉네임으로 공개됩니다. 학번은 학교 계정 이메일 숫자와 달라도 됩니다.</div><label class="check-row profile-consent"><input type="checkbox" name="publicProfileConsent" required><span>학번과 이름이 공개되는 것에 동의합니다.</span></label><div class="modal-actions"><button type="button" class="button button-secondary" data-action="sign-out">로그아웃</button><button type="submit" class="button button-primary">등록하고 계속</button></div>`;
+  const title=editingName?"이름 변경":editingNumber?"학번 변경":"학번과 이름 등록";
+  const description=editingName?"공개되는 이름을 수정합니다.":editingNumber?"진급 후 새 학번을 등록합니다.":setupDescription;
+  modalOpen(`${modalHeader(title,description)}<form id="studentProfileForm" data-mode="${mode}" class="login-profile-form">${form}</form>`);
 }
 async function saveStudentProfile(form) {
   const user=state.firebase?.auth.currentUser;
   if(!user){toast("다시 로그인한 뒤 시도해 주세요.");return;}
-  const editing=form.dataset.mode==="name",existing=studentProfileFromDisplayName(user.displayName);
-  const studentNumber=editing?existing?.studentNumber:String(new FormData(form).get("studentNumber")||"").trim();
-  const studentName=String(new FormData(form).get("studentName")||"").trim().replace(/\s+/g," ");
+  const mode=form.dataset.mode,editingName=mode==="name",editingNumber=mode==="number",editing=editingName||editingNumber,existing=studentProfileFromDisplayName(user.displayName),data=new FormData(form);
+  if(editing&&!existing){toast("저장된 학번과 이름을 찾지 못했어요. 다시 로그인해 주세요.");return;}
+  const studentNumber=editingName?existing.studentNumber:String(data.get("studentNumber")||"").trim();
+  const studentName=editingNumber?existing.name:String(data.get("studentName")||"").trim().replace(/\s+/g," ");
   const numberInput=form.querySelector("#profileStudentNumber"),nameInput=form.querySelector("#profileName");
-  if(!editing&&!/^\d{5}$/.test(studentNumber)){rejectProfileInput(numberInput,"학번은 숫자 5자리로 입력해 주세요.");return;}
-  if(hasBlockedProfileTerm(studentName)){rejectProfileInput(nameInput,"비속어·성적 표현, 도박·사행성 표현, 부적절한 사이트 이름은 사용할 수 없어요.");return;}
-  if(!/^[가-힣]{1,24}$/.test(studentName)){rejectProfileInput(nameInput,"이름은 한글만 입력해 주세요.");return;}
-  if(!editing&&new FormData(form).get("publicProfileConsent")!=="on"){toast("학번과 이름 공개 안내에 동의해 주세요.");return;}
+  if(!editingName&&!/^\d{5}$/.test(studentNumber)){rejectProfileInput(numberInput,"학번은 숫자 5자리로 입력해 주세요.");return;}
+  if(!editingNumber&&hasBlockedProfileTerm(studentName)){rejectProfileInput(nameInput,"비속어·성적 표현, 도박·사행성 표현, 부적절한 사이트 이름은 사용할 수 없어요.");return;}
+  if(!editingNumber&&!/^[가-힣]{1,24}$/.test(studentName)){rejectProfileInput(nameInput,"이름은 한글만 입력해 주세요.");return;}
+  if(!editing&&data.get("publicProfileConsent")!=="on"){toast("학번과 이름 공개 안내에 동의해 주세요.");return;}
   const submit=form.querySelector('button[type="submit"]');
   if(submit){submit.disabled=true;submit.textContent=editing?"저장 중…":"등록 중…";}
   try{
@@ -1493,11 +1498,11 @@ async function saveStudentProfile(form) {
     state.profileSetupRequired=false;
     try{await cloudSaveUserProfile(state.user);}catch(error){console.warn("닉네임 프로필 저장에 실패했습니다.",error);}
     await syncEditorAuthorization();
-    updateAccountButton();modalClose();render();toast(editing?"이름을 변경했어요.":"학번과 이름을 저장했어요.");
+    updateAccountButton();modalClose();render();toast(editingName?"이름을 변경했어요.":editingNumber?"학번을 변경했어요.":"학번과 이름을 저장했어요.");
   }catch(error){
     console.error("학번·이름 저장 실패:",error);
     toast("정보를 저장하지 못했어요. 다시 시도해 주세요.");
-    if(submit&&form.isConnected){submit.disabled=false;submit.textContent=editing?"이름 저장":"등록하고 계속";}
+    if(submit&&form.isConnected){submit.disabled=false;submit.textContent=editingName?"이름 저장":editingNumber?"학번 저장":"등록하고 계속";}
   }
 }
 async function googleLogin(form) {
@@ -1585,6 +1590,7 @@ document.addEventListener("click",async event=>{
     case "close-modal":modalClose();break;
     case "account":modalClose();showLoginModal();break;
     case "change-profile-name":showStudentProfileModal("name");break;
+    case "change-profile-number":showStudentProfileModal("number");break;
     case "open-ai":navigate("ai");break;
     case "open-recommendations":navigate("recommendations");break;
     case "open-trends":navigate("trends");break;
