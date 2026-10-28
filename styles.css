@@ -216,6 +216,8 @@ body.dark .maintenance-note{color:#9fa5b5}
 body.dark .hero-tool-ai {
   --ai-button-bg: #292e49;
   --ai-button-hover-bg: #373960;
+  background: linear-gradient(var(--ai-button-bg),var(--ai-button-bg)) padding-box,
+    conic-gradient(from var(--ai-rainbow-angle), #ff4f78, #ff9d43, #ffe45e, #48d6a2, #38bdf8, #7974ff, #d66bff, #ff4f78) border-box;
 }
 body.dark .hero-tool-ai:hover {
   background: linear-gradient(var(--ai-button-hover-bg),var(--ai-button-hover-bg)) padding-box,
