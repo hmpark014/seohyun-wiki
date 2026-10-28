@@ -1,6 +1,6 @@
 const { firebaseConfig, isFirebaseConfigured, appCheckSiteKey } = window.SEOHYEON_FIREBASE;
 
-const ADMIN_EMAIL = "hmpark014@gmail.com";
+const ADMIN_EMAIL = "shwikiadmin@gmail.com";
 const SCHOOL_EMAIL_PATTERN = /^25-\d{5}@seohyun\.hs\.kr$/i;
 const DEFAULT_LIMITS = { chars: 6000, images: 2, videos: 0 };
 const WIKI_CATEGORIES = ["학교", "학교 생활", "교칙·제도", "수업·교육과정", "학교 활동", "동아리", "학교 역사", "시설·공간", "서현위키", "기타"];

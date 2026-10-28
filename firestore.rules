@@ -1,8 +1,8 @@
 rules_version = '2';
 service cloud.firestore {
 match /databases/{database}/documents {
-    function signedIn() { return request.auth != null && request.auth.token.email_verified == true && (request.auth.token.email == 'hmpark014@gmail.com' || request.auth.token.email.matches('^25-[0-9]{5}@seohyun[.]hs[.]kr$')); }
-    function isAdmin() { return signedIn() && request.auth.token.email == 'hmpark014@gmail.com'; }
+    function signedIn() { return request.auth != null && request.auth.token.email_verified == true && (request.auth.token.email == 'shwikiadmin@gmail.com' || request.auth.token.email.matches('^25-[0-9]{5}@seohyun[.]hs[.]kr$')); }
+    function isAdmin() { return signedIn() && request.auth.token.email == 'shwikiadmin@gmail.com'; }
     function editorPermissionPath(uid) { return /databases/$(database)/documents/editorPermissions/$(uid); }
     function canManageEditRestrictions() { return isAdmin() || (signedIn() && exists(editorPermissionPath(request.auth.uid)) && get(editorPermissionPath(request.auth.uid)).data.canManageRestrictions == true); }
     function canApproveEditRequests() { return isAdmin() || (signedIn() && exists(editorPermissionPath(request.auth.uid)) && get(editorPermissionPath(request.auth.uid)).data.canApproveEditRequests == true); }
