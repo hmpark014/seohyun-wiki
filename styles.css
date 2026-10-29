@@ -639,6 +639,34 @@ body.dark .editor-toc-placeholder span{color:#a5aabb}
 .shuffle-button svg{width:18px;height:18px;stroke-width:2}
 .admin-doc-restriction-help{margin:0;padding:9px 16px;border-bottom:1px solid var(--line);background:var(--soft);color:#777d8c;font-size:10px;line-height:1.6}
 .admin-doc-restriction-help strong{color:#5149c6}
+
+/* Make the reading-size preference visibly scale article text and headings. */
+body[data-article-size="normal"] .article-main .article-body{font-size:15px}
+body[data-article-size="large"] .article-main .article-body{font-size:18px}
+body[data-article-size="larger"] .article-main .article-body{font-size:21px}
+body[data-article-size="normal"] .article-main .article-body h2{font-size:24px}
+body[data-article-size="large"] .article-main .article-body h2{font-size:29px}
+body[data-article-size="larger"] .article-main .article-body h2{font-size:34px}
+body[data-article-size="normal"] .article-main .article-body h3{font-size:18px}
+body[data-article-size="large"] .article-main .article-body h3{font-size:22px}
+body[data-article-size="larger"] .article-main .article-body h3{font-size:26px}
+body[data-article-size="large"] .article-main .article-body h4,
+body[data-article-size="large"] .article-main .article-body h5,
+body[data-article-size="large"] .article-main .article-body h6{font-size:20px}
+body[data-article-size="larger"] .article-main .article-body h4,
+body[data-article-size="larger"] .article-main .article-body h5,
+body[data-article-size="larger"] .article-main .article-body h6{font-size:23px}
+@media(max-width:620px){
+  body[data-article-size="normal"] .article-main .article-body{font-size:14px}
+  body[data-article-size="large"] .article-main .article-body{font-size:17px}
+  body[data-article-size="larger"] .article-main .article-body{font-size:20px}
+  body[data-article-size="normal"] .article-main .article-body h2{font-size:21px}
+  body[data-article-size="large"] .article-main .article-body h2{font-size:25px}
+  body[data-article-size="larger"] .article-main .article-body h2{font-size:29px}
+  body[data-article-size="normal"] .article-main .article-body h3{font-size:17px}
+  body[data-article-size="large"] .article-main .article-body h3{font-size:21px}
+  body[data-article-size="larger"] .article-main .article-body h3{font-size:25px}
+}
 .admin-doc-actions .admin-restriction-action{border-color:#e2e0f6;background:#f7f6ff;color:#5149c6}
 .admin-doc-actions .admin-restriction-action:hover{border-color:#c9c6f3;background:#eeedff;color:#4038ae}
 body.dark .admin-doc-restriction-help{border-color:#35384a;background:#292b3d;color:#aeb4c5}
