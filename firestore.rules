@@ -41,7 +41,7 @@ match /limitRequests/{requestId} {
 }
 match /reports/{reportId} {
       allow read: if isAdmin();
-      allow create: if request.resource.data.docId is string && request.resource.data.docId.size() <= 200 && request.resource.data.reason is string && request.resource.data.reason.size() <= 1500 && request.resource.data.status == 'pending';
+      allow create: if signedIn() && request.resource.data.keys().hasOnly(['docId', 'reason', 'reporterUid', 'status', 'createdAt']) && request.resource.data.keys().hasAll(['docId', 'reason', 'reporterUid', 'status', 'createdAt']) && request.resource.data.reporterUid == request.auth.uid && request.resource.data.docId is string && request.resource.data.docId.size() <= 200 && request.resource.data.reason is string && request.resource.data.reason.size() > 0 && request.resource.data.reason.size() <= 1500 && request.resource.data.status == 'pending' && request.resource.data.createdAt is timestamp && exists(/databases/$(database)/documents/docs/$(request.resource.data.docId));
       allow update: if isAdmin();
       allow delete: if isAdmin();
 }
