@@ -444,9 +444,10 @@ function updateAccountButton() {
   else {label.textContent="로그인";avatar.innerHTML=icons.user;}
 }
 function toast(message) { toastEl.textContent=message; toastEl.classList.add("show"); clearTimeout(state.toastTimer); state.toastTimer=setTimeout(()=>toastEl.classList.remove("show"),2800); }
-function modalOpen(html) {
+function modalOpen(html,{wide=false}={}) {
   const wasClosed=modalWrap.hidden;
   modal.innerHTML=html;
+  modal.classList.toggle("modal-wide",wide);
   modalWrap.hidden=false;
   if(wasClosed){
     const scrollbarWidth=Math.max(0,window.innerWidth-document.documentElement.clientWidth);
@@ -457,7 +458,7 @@ function modalOpen(html) {
 }
 function modalClose() {
   if(state.profileSetupRequired){toast("계속 이용하려면 학번과 이름을 등록해 주세요. 로그아웃할 수 있어요.");return;}
-  modalWrap.hidden=true; document.body.style.overflow=""; document.body.style.paddingRight="";
+  modalWrap.hidden=true; modal.classList.remove("modal-wide"); document.body.style.overflow=""; document.body.style.paddingRight="";
 }
 function modalHeader(title,desc="") { return `<div class="modal-header"><div><h2 id="modalTitle">${esc(title)}</h2>${desc?`<p>${esc(desc)}</p>`:""}</div><button class="modal-close" type="button" data-action="close-modal" aria-label="닫기">×</button></div>`; }
 function navigationSnapshot() {
@@ -1184,7 +1185,7 @@ function renderAdmin() {
     const rows=state.requests.map(r=>{
       const status=r.status==="pending"?"승인 대기":r.status==="approved"?"승인됨":"거절됨";
       const searchable=normalizeSearchText([r.title,r.author,r.authorEmail,r.authorUid,r.ownerUid,r.uid,r.reason,r.status,status,r.body].filter(Boolean).join(" "));
-      return `<article class="request-row" data-admin-search-row="adminRequestSearch" data-search="${esc(searchable)}"><div class="request-copy"><div class="request-title">${esc(r.title||"제목 없는 문서")}</div><div class="request-detail">${esc(r.reason||"새 문서 공개 승인 요청")}<br>요청: ${esc(r.author||"이용자")} · 글자 ${Number(r.chars||0).toLocaleString()} / 사진 ${r.images||r.mediaImages?.length||0} / 동영상 ${r.videos||r.mediaVideos?.length||0} · ${status}</div></div><div class="request-actions">${r.status==="pending"?`<button class="button button-primary" data-action="approve-request" data-id="${esc(r.id)}">승인</button><button class="button button-secondary" data-action="reject-request" data-id="${esc(r.id)}">거절</button>`:`<button class="button button-secondary" data-action="view-request" data-id="${esc(r.id)}">요청 보기</button>`}</div></article>`;
+      return `<article class="request-row" data-admin-search-row="adminRequestSearch" data-search="${esc(searchable)}"><div class="request-copy"><div class="request-title">${esc(r.title||"제목 없는 문서")}</div><div class="request-detail">${esc(r.reason||"새 문서 공개 승인 요청")}<br>요청: ${esc(r.author||"이용자")} · 글자 ${Number(r.chars||0).toLocaleString()} / 사진 ${r.images||r.mediaImages?.length||0} / 동영상 ${r.videos||r.mediaVideos?.length||0} · ${status}</div></div><div class="request-actions">${r.status==="pending"?`<button class="button button-primary" data-action="preview-request" data-id="${esc(r.id)}">내용 확인</button><button class="button button-secondary" data-action="reject-request" data-id="${esc(r.id)}">거절</button>`:`<button class="button button-secondary" data-action="view-request" data-id="${esc(r.id)}">요청 보기</button>`}</div></article>`;
     }).join("");
     const empty=`<div class="empty-state"><div class="empty-mark">${icons.shield}</div><p class="empty-title">대기 중인 승인 요청이 없어요</p><p class="empty-copy">새 문서와 작성 제한 초과 요청이 이곳에 표시됩니다.</p></div>`;
     body=`<section class="panel admin-list-panel">${adminSearchToolbar("adminRequestSearch","문서명, 작성자, 요청 내용 검색",state.requests.length,"승인 요청 검색")}${rows||empty}${adminSearchNoResults("adminRequestSearch")}</section>`;
@@ -1419,7 +1420,25 @@ async function approveRequest(id) {
   if(state.firebase){try{await cloudReviewLimitRequest(req,doc,true);}catch(error){console.error("승인 문서 저장 실패:",error);toast("승인 저장에 실패했어요. 문서는 아직 공개되지 않았습니다. 검토 권한과 Firestore 규칙 배포 여부를 확인해 주세요.");return;}}
   req.status="approved";
   logDocumentChange(doc,existing?"edit":"new",existing?.body||"");if(existing)state.docs[index]=doc;else state.docs.unshift(doc);
-  saveLocal();render();toast("요청을 승인하고 문서를 공개했어요.");
+  modalClose();saveLocal();render();toast("요청을 승인하고 문서를 공개했어요.");
+}
+function openRequestPreview(id) {
+  if(!canApproveEditRequests()){toast("작성 승인 요청을 검토할 권한이 없어요.");return;}
+  const req=state.requests.find(item=>item.id===id);if(!req)return;
+  const body=String(req.body||"");
+  const images=Array.isArray(req.mediaImages)?req.mediaImages:[],videos=Array.isArray(req.mediaVideos)?req.mediaVideos:[];
+  const inlineMedia=restoreLegacyMedia(body,images,videos);
+  const headings=documentHeadings(inlineMedia.body),tocMarkup=renderTocMarkup(headings);
+  const hasInlineToc=/^\s*\[(?:목차|tableofcontents)(?:\(\s*hide\s*\))?\]\s*$/im.test(WikiParser.migrateBody(inlineMedia.body));
+  const mediaHtml=[...(inlineMedia.images||[]).map(url=>`<a class="media-card" href="${esc(url)}" target="_blank" rel="noopener noreferrer"><img src="${esc(url)}" alt="문서 첨부 이미지" loading="lazy"></a>`),...(inlineMedia.videos||[]).map(url=>`<a class="media-link" href="${esc(url)}" target="_blank" rel="noopener noreferrer">동영상 보기 ${icons.arrow}</a>`)].join("");
+  const existing=state.docs.find(doc=>doc.id===(req.docId||slugify(req.title))&&!doc.sample);
+  const requestType=existing?`기존 문서 수정 · ${existing.title}`:(req.reason||"새 문서 공개 승인 요청");
+  const status=req.status==="pending"?"승인 대기":req.status==="approved"?"승인됨":"거절됨";
+  const description=req.status==="pending"?"승인 전에 요청된 문서 내용을 확인해 주세요.":"요청 당시 제출된 문서 내용을 확인합니다.";
+  const previewBody=body.trim()?`<div class="article-body">${markdownHtml(inlineMedia.body,headings.map(heading=>heading.id),hasInlineToc?"":tocMarkup)}${mediaHtml?`<div class="article-media">${mediaHtml}</div>`:""}</div>`:`<div class="approval-preview-empty">요청에 본문이 없어 미리 볼 내용이 없습니다.</div>`;
+  const canApprove=req.status==="pending"&&Boolean(body.trim());
+  const actions=req.status==="pending"?`<div class="modal-actions approval-preview-actions"><button class="button button-secondary" data-action="close-modal">닫기</button><button class="button button-secondary" data-action="reject-request" data-id="${esc(req.id)}">거절</button>${canApprove?`<button class="button button-primary" data-action="approve-request" data-id="${esc(req.id)}">${existing?"승인하고 반영":"승인하고 공개"}</button>`:""}</div>`:`<div class="modal-actions"><button class="button button-secondary" data-action="close-modal">닫기</button></div>`;
+  modalOpen(`${modalHeader(req.title||"제목 없는 문서", description)}<div class="approval-preview-meta"><span>${esc(req.category||"미분류")}</span><span>${esc(req.author||"이용자")}</span><span>${esc(status)}</span><span>${Number(req.chars||body.length).toLocaleString()}자 · 사진 ${Number(req.images||req.mediaImages?.length||0)}개 · 동영상 ${Number(req.videos||req.mediaVideos?.length||0)}개</span></div><p class="approval-preview-context">${esc(requestType)}${req.summary?`<br>${esc(req.summary)}`:""}</p><div class="approval-preview-content">${previewBody}</div>${actions}`,{wide:true});
 }
 async function rejectRequest(id) {
   if(!canApproveEditRequests()){toast("작성 승인 요청을 검토할 권한이 없어요.");return;}
@@ -1428,7 +1447,7 @@ async function rejectRequest(id) {
   if(!state.isAdmin&&ownerUid&&ownerUid===state.user?.uid){toast("본인이 제출한 요청은 검토할 수 없어요.");return;}
   if(state.firebase){try{await cloudReviewLimitRequest(req,null,false);}catch(error){console.error("승인 요청 거절 실패:",error);toast("거절 상태를 저장하지 못했어요. 검토 권한과 Firestore 규칙 배포 여부를 확인해 주세요.");return;}}
   req.status="rejected";
-  saveLocal();render();toast("승인 요청을 거절했어요.");
+  modalClose();saveLocal();render();toast("승인 요청을 거절했어요.");
 }
 async function submitReport(docId) {
   if(!state.user){modalClose();toast("문서를 신고하려면 먼저 로그인해 주세요.");showLoginModal();return;}
@@ -1654,7 +1673,8 @@ document.addEventListener("click",async event=>{
     case "reject-edit-proposal":reviewEditProposal(id,false);break;
     case "set-editor-permission":setEditorPermission(target.dataset.uid,target.dataset.granted==="true");break;
     case "review-report":reviewReport(id);break;
-    case "view-request":{const req=state.requests.find(r=>r.id===id);if(req?.body)modalOpen(`${modalHeader(req.title||"승인 요청", "요청된 문서 내용")}<div class="article-body">${markdownHtml(req.body)}</div><div class="modal-actions"><button class="button button-secondary" data-action="close-modal">닫기</button></div>`);break;}
+    case "preview-request":openRequestPreview(id);break;
+    case "view-request":openRequestPreview(id);break;
     case "save-limits":saveLimits();break;
     case "admin-save-overlimit":{const doc=JSON.parse(target.dataset.doc);modalClose();await persistDoc(doc);break;}
     case "insert-markup":insertMarkup(target.dataset.markup,target.dataset.selectMarkup||"");break;
